@@ -23,6 +23,7 @@ df = load_data()
 
 # === Styling ===
 st.markdown("""
+    st.markdown("""
     <style>
     body {
         font-family: 'Segoe UI', sans-serif;
@@ -46,6 +47,19 @@ st.markdown("""
         font-weight: 600;
         color: #333333;
         margin-bottom: 10px;
+    }
+    /* NEW TABLE STYLING */
+    thead tr th {
+        font-size: 16px !important;
+        color: #111 !important;
+    }
+    tbody tr td {
+        font-size: 16px !important;
+        color: #222 !important;
+    }
+    .dataframe {
+        border-radius: 8px;
+        border: 1px solid #ddd;
     }
     </style>
 """, unsafe_allow_html=True)
