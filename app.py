@@ -4,17 +4,16 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # === CONFIG ===
-SHEET_NAME = "KPI"  # Name of the sheet/tab (not the file)
-SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"  # From your Google Sheet URL
+SHEET_NAME = "KPI"  # Sheet/tab name
+SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"  # Google Sheet ID
 
-# === Google Auth Setup ===
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
+# === Google Auth from Streamlit Secrets ===
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"])
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SHEET_ID)
 worksheet = sheet.worksheet(SHEET_NAME)
 
-# === Load data ===
+# === Load Data ===
 @st.cache_data
 def load_data():
     data = worksheet.get_all_records()
