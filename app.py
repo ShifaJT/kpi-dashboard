@@ -21,6 +21,10 @@ def load_data():
 
 df = load_data()
 
+# === Helper Function for Styled Table ===
+def styled_table(df):
+    return df.to_html(classes='styled-table', border=0)
+
 # === Styling ===
 st.markdown("""
     <style>
@@ -44,21 +48,28 @@ st.markdown("""
     .section-title {
         font-size: 20px;
         font-weight: 600;
-        color: #333333;
+        color: #222;
         margin-bottom: 10px;
     }
-    thead tr th {
-        font-size: 16px !important;
-        color: #111 !important;
-        background-color: #f0f0f0;
+    .styled-table {
+        font-size: 16px;
+        color: #111111;
+        width: 100%;
+        border-collapse: collapse;
     }
-    tbody tr td {
-        font-size: 16px !important;
-        color: #222 !important;
-    }
-    .dataframe {
-        border-radius: 8px;
+    .styled-table th, .styled-table td {
         border: 1px solid #ddd;
+        padding: 10px 14px;
+        text-align: left;
+        color: #111111 !important;
+    }
+    .styled-table tr:nth-child(even) {
+        background-color: #f8f8f8;
+    }
+    .styled-table th {
+        background-color: #eaeaea;
+        font-weight: bold;
+        color: #111111 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -85,14 +96,16 @@ if emp_id and month:
         st.markdown('<div class="section-title">🔹 Performance Metrics</div>', unsafe_allow_html=True)
         perf_cols = ["Hold", "Wrap", "Auto-On", "Schedule Adherence", "Resolution CSAT",
                      "Agent Behaviour", "Quality", "PKT", "SL + UPL", "LOGINS"]
-        st.dataframe(emp_data[perf_cols].T, use_container_width=True)
+        perf_data = emp_data[perf_cols].T.rename(columns={emp_data.index[0]: 'Value'})
+        st.markdown(styled_table(perf_data), unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # === KPI Scores Section ===
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">✅ KPI Scores</div>', unsafe_allow_html=True)
         kpi_cols = [col for col in emp_data.columns if "KPI Score" in col]
-        st.dataframe(emp_data[kpi_cols].T, use_container_width=True)
+        kpi_data = emp_data[kpi_cols].T.rename(columns={emp_data.index[0]: 'Score'})
+        st.markdown(styled_table(kpi_data), unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # === Grand Total ===
@@ -110,9 +123,8 @@ if emp_id and month:
             "Target Committed for Quality"
         ]
         if all(col in emp_data.columns for col in target_cols):
-            targets = emp_data[target_cols].T
-            targets.columns = ["Target"]
-            st.table(targets)
+            target_data = emp_data[target_cols].T.rename(columns={emp_data.index[0]: 'Target'})
+            st.markdown(styled_table(target_data), unsafe_allow_html=True)
         else:
             st.warning("Target data not available yet.")
         st.markdown('</div>', unsafe_allow_html=True)
