@@ -21,48 +21,85 @@ def load_data():
 
 df = load_data()
 
-# === UI ===
+# === Styling ===
+st.markdown("""
+    <style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        color: #222;
+    }
+    .stApp {
+        background-color: #f9f9f9;
+    }
+    .stMetric {
+        font-size: 20px;
+    }
+    .card {
+        background-color: #ffffff;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #333333;
+        margin-bottom: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# === Title ===
 st.title("📊 KPI Dashboard for Champs")
 
+# === Input Section ===
 emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
 month = st.selectbox("Select Month", sorted(df['Month'].unique()))
 
+# === Result Section ===
 if emp_id and month:
     emp_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == month)]
 
     if emp_data.empty:
         st.warning("No data found for that EMP ID and month.")
     else:
-        # ✅ Show name in output
         emp_name = emp_data["NAME"].values[0]
-        st.success(f"KPI Data for {emp_name} (EMP ID: {emp_id}) | Month: {month}")
+        st.markdown(f"### ✅ KPI Data for **{emp_name}** (EMP ID: {emp_id}) | Month: **{month}**")
 
-        # === Performance Metrics ===
-        st.subheader("🔹 Performance Metrics")
+        # === Performance Section ===
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🔹 Performance Metrics</div>', unsafe_allow_html=True)
         perf_cols = ["Hold", "Wrap", "Auto-On", "Schedule Adherence", "Resolution CSAT",
                      "Agent Behaviour", "Quality", "PKT", "SL + UPL", "LOGINS"]
-        st.write(emp_data[perf_cols].T)
+        st.dataframe(emp_data[perf_cols].T, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        # === KPI Scores ===
-        st.subheader("✅ KPI Scores")
+        # === KPI Scores Section ===
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">✅ KPI Scores</div>', unsafe_allow_html=True)
         kpi_cols = [col for col in emp_data.columns if "KPI Score" in col]
-        st.write(emp_data[kpi_cols].T)
+        st.dataframe(emp_data[kpi_cols].T, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         # === Grand Total ===
-        st.subheader("🏁 Grand Total")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🏁 Grand Total</div>', unsafe_allow_html=True)
         st.metric("Grand Total KPI", f"{emp_data['Grand Total'].values[0]}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        # ✅ Target Committed Section
-        st.subheader("🎯 Target Committed for Next Month")
+        # === Target Committed Section ===
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🎯 Target Committed for Next Month</div>', unsafe_allow_html=True)
         target_cols = [
             "Target Committed for PKT",
             "Target Committed for CSAT",
             "Target Committed for Quality"
         ]
-
         if all(col in emp_data.columns for col in target_cols):
             targets = emp_data[target_cols].T
             targets.columns = ["Target"]
             st.table(targets)
         else:
             st.warning("Target data not available yet.")
+        st.markdown('</div>', unsafe_allow_html=True)
