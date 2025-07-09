@@ -33,16 +33,36 @@ if emp_id and month:
     if emp_data.empty:
         st.warning("No data found for that EMP ID and month.")
     else:
-        st.success(f"KPI Data for EMP ID: {emp_id} | Month: {month}")
+        # ✅ Show name in output
+        emp_name = emp_data["NAME"].values[0]
+        st.success(f"KPI Data for {emp_name} (EMP ID: {emp_id}) | Month: {month}")
 
+        # === Performance Metrics ===
         st.subheader("🔹 Performance Metrics")
         perf_cols = ["Hold", "Wrap", "Auto-On", "Schedule Adherence", "Resolution CSAT",
                      "Agent Behaviour", "Quality", "PKT", "SL + UPL", "LOGINS"]
         st.write(emp_data[perf_cols].T)
 
+        # === KPI Scores ===
         st.subheader("✅ KPI Scores")
         kpi_cols = [col for col in emp_data.columns if "KPI Score" in col]
         st.write(emp_data[kpi_cols].T)
 
+        # === Grand Total ===
         st.subheader("🏁 Grand Total")
         st.metric("Grand Total KPI", f"{emp_data['Grand Total'].values[0]}")
+
+        # ✅ Target Committed Section
+        st.subheader("🎯 Target Committed for Next Month")
+        target_cols = [
+            "Target Committed for PKT",
+            "Target Committed for CSAT",
+            "Target Committed for Quality"
+        ]
+
+        if all(col in emp_data.columns for col in target_cols):
+            targets = emp_data[target_cols].T
+            targets.columns = ["Target"]
+            st.table(targets)
+        else:
+            st.warning("Target data not available yet.")
