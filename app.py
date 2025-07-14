@@ -35,9 +35,6 @@ st.markdown("""
     .stApp {
         background-color: #f9f9f9;
     }
-    .stMetric {
-        font-size: 20px;
-    }
     .card {
         background-color: #ffffff;
         border-radius: 12px;
@@ -77,63 +74,60 @@ st.markdown("""
 # === Title ===
 st.title("📊 KPI Dashboard for Champs")
 
-# === About Section ===
-with st.expander("📘 About This Dashboard"):
-    st.markdown("### KPI Weightage and Scoring")
-    weightage_data = {
-        "KPI Metrics": [
-            "Hold KPI Score",
-            "Auto-On KPI Score",
-            "Schedule Adherence KPI Score",
-            "Resolution CSAT KPI Score",
-            "Agent Behaviour KPI Score",
-            "Quality KPI Score",
-            "PKT KPI Score"
-        ],
-        "Weightage": ["0%", "30%", "10%", "10%", "20%", "20%", "10%"],
-        "Example Score": ["2", "2", "4", "5", "4", "1", "2.6"]
-    }
-    weightage_df = pd.DataFrame(weightage_data)
-    st.table(weightage_df)
+# === KPI Meaning and Metric Definition (no sample values) ===
+st.markdown("## 📘 About This Dashboard")
 
-    st.markdown("### KPI Metric Definitions")
-    metric_data = {
-        "Metric Name": [
-            "Hold", "Wrap", "Auto-On", "Schedule Adherence",
-            "Resolution CSAT", "Agent Behaviour", "Quality", "PKT", "SL + UPL", "LOGINS"
-        ],
-        "Description": [
-            "Average hold time used",
-            "Average time taken to wrap the call",
-            "Average duration of champ using auto-on",
-            "Shift adherence for the month",
-            "Customer feedback on resolution given",
-            "Customer feedback on champ behaviour",
-            "Average Quality Score achieved for the month",
-            "Process knowledge test",
-            "Number of sick and unplanned leaves",
-            "Number of days logged in"
-        ],
-        "Example Value": [
-            "00:00:52", "00:00:56", "07:43:21", "91%", "86%", "88%", "64%", "-", "25", "25"
-        ],
-        "Unit": [
-            "HH:MM:SS", "HH:MM:SS", "HH:MM:SS", "Percentage",
-            "Percentage", "Percentage", "Percentage", "Percentage",
-            "Days", "Days"
-        ]
-    }
-    metric_df = pd.DataFrame(metric_data)
-    st.table(metric_df)
+# KPI Weightage Table
+st.markdown("### 🎯 KPI Weightage and Score Calculation")
+weightage_table = pd.DataFrame({
+    "Weightage": ["0%", "30%", "10%", "10%", "20%", "20%", "10%"],
+    "KPI Metrics": [
+        "Hold KPI Score",
+        "Auto-On KPI Score",
+        "Schedule Adherence KPI Score",
+        "Resolution CSAT KPI Score",
+        "Agent Behaviour KPI Score",
+        "Quality KPI Score",
+        "PKT KPI Score"
+    ],
+    "Score": ["2", "2", "4", "5", "4", "1", "2.6"]
+})
+st.table(weightage_table)
 
-# === Input Section ===
+# KPI Metric Definitions
+st.markdown("### 📖 KPI Metric Definitions")
+definitions_table = pd.DataFrame({
+    "Description": [
+        "Average hold time used",
+        "Average time taken to wrap the call",
+        "Average duration of champ using auto on",
+        "Shift adherence for the month",
+        "Customer feedback on resolution given",
+        "Customer feedback on champ behaviour",
+        "Average Quality Score achieved for the month",
+        "Process knowledge test",
+        "Number of sick and unplanned leaves",
+        "Number of days logged in"
+    ],
+    "Metric Name": [
+        "Hold", "Wrap", "Auto-On", "Schedule Adherence", "Resolution CSAT",
+        "Agent Behaviour", "Quality", "PKT", "SL + UPL", "LOGINS"
+    ],
+    "Unit": [
+        "HH:MM:SS", "HH:MM:SS", "HH:MM:SS", "Percentage", "Percentage", "Percentage",
+        "Percentage", "Percentage", "Days", "Days"
+    ]
+})
+st.table(definitions_table)
+
+# === Input Fields ===
 emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
 month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
 ].index(m)))
 
-# === Result Section ===
+# === Result Display ===
 if emp_id and month:
     emp_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == month)]
 
@@ -143,7 +137,7 @@ if emp_id and month:
         emp_name = emp_data["NAME"].values[0]
         st.markdown(f"### ✅ KPI Data for **{emp_name}** (EMP ID: {emp_id}) | Month: **{month}**")
 
-        # === Performance Section ===
+        # === Performance Metrics ===
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">🔹 Performance Metrics</div>', unsafe_allow_html=True)
         perf_cols = ["Hold", "Wrap", "Auto-On", "Schedule Adherence", "Resolution CSAT",
@@ -152,7 +146,7 @@ if emp_id and month:
         st.markdown(styled_table(perf_data), unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # === KPI Scores Section ===
+        # === KPI Scores ===
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">✅ KPI Scores</div>', unsafe_allow_html=True)
         kpi_cols = [col for col in emp_data.columns if "KPI Score" in col]
@@ -160,52 +154,14 @@ if emp_id and month:
         st.markdown(styled_table(kpi_data), unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # === Grand Total Section ===
+        # === Grand Total ===
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">🏁 Grand Total</div>', unsafe_allow_html=True)
         current_score = emp_data['Grand Total'].values[0]
         st.metric("Grand Total KPI", f"{current_score}")
-        
-        # === Compare with Previous Month ===
-        month_order = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ]
-        all_months = [m for m in month_order if m in df['Month'].unique()]
-        current_index = all_months.index(month)
-
-        if current_index > 0:
-            previous_month = all_months[current_index - 1]
-            prev_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == previous_month)]
-
-            if not prev_data.empty:
-                prev_score = prev_data["Grand Total"].values[0]
-                diff = round(current_score - prev_score, 2)
-
-                if diff > 0:
-                    st.success(f"📈 You improved by **+{diff}** points since last month ({previous_month})!")
-                elif diff < 0:
-                    st.warning(f"📉 You dropped by **{abs(diff)}** points since last month ({previous_month}). Let's bounce back.")
-                else:
-                    st.info(f"➖ No change in score from last month ({previous_month}). Keep pushing forward.")
-            else:
-                st.info("ℹ️ No data found for previous month to compare.")
-        else:
-            st.info("ℹ️ This is the first month in the dataset — no comparison available.")
-
-        # === Motivation Based on Current Score ===
-        if current_score >= 4.5:
-            st.success("Excellent work! You're setting the benchmark for the team.")
-        elif current_score >= 4.0:
-            st.info("Great job! A little more polish and you're at the top.")
-        elif current_score >= 3.0:
-            st.warning("You're doing well! Keep pushing and aim for that 4+ next month.")
-        else:
-            st.error("Let’s improve together. You’ve got what it takes to bounce back.")
-
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # === Target Committed Section ===
+        # === Target Committed ===
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">🎯 Target Committed for Next Month</div>', unsafe_allow_html=True)
         target_cols = [
