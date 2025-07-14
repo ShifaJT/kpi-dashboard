@@ -20,6 +20,7 @@ def load_data():
     return pd.DataFrame(data)
 
 df = load_data()
+df.columns = df.columns.str.strip()  # Strip spaces from column names
 
 # === Styling ===
 st.markdown("""
@@ -115,18 +116,57 @@ if emp_id and month:
 
         st.markdown(pd.DataFrame(kpi_table).to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
 
-        # === Grand Total KPI ===
+        # === Grand Total ===
         st.subheader("🏁 Grand Total")
-        st.metric("Grand Total KPI", f"{emp_data['Grand Total'].values[0]}")
+        current_score = emp_data['Grand Total'].values[0]
+        st.metric("Grand Total KPI", f"{current_score}")
+
+        # === Previous Month Comparison ===
+        month_order = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]
+        all_months = [m for m in month_order if m in df['Month'].unique()]
+        current_index = all_months.index(month)
+
+        if current_index > 0:
+            previous_month = all_months[current_index - 1]
+            prev_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == previous_month)]
+
+            if not prev_data.empty:
+                prev_score = prev_data["Grand Total"].values[0]
+                diff = round(current_score - prev_score, 2)
+
+                if diff > 0:
+                    st.success(f"📈 You improved by +{diff} points since last month ({previous_month})!")
+                elif diff < 0:
+                    st.warning(f"📉 You dropped by {abs(diff)} points since last month ({previous_month}). Let’s bounce back!")
+                else:
+                    st.info(f"No change from last month ({previous_month}). Keep the momentum going.")
+            else:
+                st.info("No data found for previous month.")
+        else:
+            st.info("First month in record — no comparison available.")
+
+        # === Motivational Message ===
+        if current_score >= 4.5:
+            st.success("🌟 Outstanding! You're setting the benchmark.")
+        elif current_score >= 4.0:
+            st.info("👏 Great job! Keep pushing to reach the top.")
+        elif current_score >= 3.0:
+            st.warning("You're doing good! Let’s strive for more consistency.")
+        else:
+            st.error("Don't give up — big growth starts with small steps. We're with you!")
 
         # === Target Committed ===
         st.subheader("🎯 Target Committed for Next Month")
         target_cols = [
             "Target Committed for PKT",
-            "Target Committed for CSAT",
+            "Target Committed for CSAT (Agent Behaviour)",
             "Target Committed for Quality"
         ]
 
+        emp_data.columns = emp_data.columns.str.strip()
         if all(col in emp_data.columns for col in target_cols):
             target_table = emp_data[target_cols].T.reset_index()
             target_table.columns = ["Target Metric", "Target"]
