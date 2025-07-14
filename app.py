@@ -77,6 +77,55 @@ st.markdown("""
 # === Title ===
 st.title("📊 KPI Dashboard for Champs")
 
+# === About Section ===
+with st.expander("📘 About This Dashboard"):
+    st.markdown("### KPI Weightage and Scoring")
+    weightage_data = {
+        "KPI Metrics": [
+            "Hold KPI Score",
+            "Auto-On KPI Score",
+            "Schedule Adherence KPI Score",
+            "Resolution CSAT KPI Score",
+            "Agent Behaviour KPI Score",
+            "Quality KPI Score",
+            "PKT KPI Score"
+        ],
+        "Weightage": ["0%", "30%", "10%", "10%", "20%", "20%", "10%"],
+        "Example Score": ["2", "2", "4", "5", "4", "1", "2.6"]
+    }
+    weightage_df = pd.DataFrame(weightage_data)
+    st.table(weightage_df)
+
+    st.markdown("### KPI Metric Definitions")
+    metric_data = {
+        "Metric Name": [
+            "Hold", "Wrap", "Auto-On", "Schedule Adherence",
+            "Resolution CSAT", "Agent Behaviour", "Quality", "PKT", "SL + UPL", "LOGINS"
+        ],
+        "Description": [
+            "Average hold time used",
+            "Average time taken to wrap the call",
+            "Average duration of champ using auto-on",
+            "Shift adherence for the month",
+            "Customer feedback on resolution given",
+            "Customer feedback on champ behaviour",
+            "Average Quality Score achieved for the month",
+            "Process knowledge test",
+            "Number of sick and unplanned leaves",
+            "Number of days logged in"
+        ],
+        "Example Value": [
+            "00:00:52", "00:00:56", "07:43:21", "91%", "86%", "88%", "64%", "-", "25", "25"
+        ],
+        "Unit": [
+            "HH:MM:SS", "HH:MM:SS", "HH:MM:SS", "Percentage",
+            "Percentage", "Percentage", "Percentage", "Percentage",
+            "Days", "Days"
+        ]
+    }
+    metric_df = pd.DataFrame(metric_data)
+    st.table(metric_df)
+
 # === Input Section ===
 emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
 month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: [
@@ -134,11 +183,11 @@ if emp_id and month:
                 diff = round(current_score - prev_score, 2)
 
                 if diff > 0:
-                    st.success(f"📈 You improved by **+{diff}** points since last month ({previous_month})! 🔥")
+                    st.success(f"📈 You improved by **+{diff}** points since last month ({previous_month})!")
                 elif diff < 0:
-                    st.warning(f"📉 You dropped by **{abs(diff)}** points since last month ({previous_month}). Let's bounce back! 💪")
+                    st.warning(f"📉 You dropped by **{abs(diff)}** points since last month ({previous_month}). Let's bounce back.")
                 else:
-                    st.info(f"➖ No change in score from last month ({previous_month}). Keep pushing forward! 🚀")
+                    st.info(f"➖ No change in score from last month ({previous_month}). Keep pushing forward.")
             else:
                 st.info("ℹ️ No data found for previous month to compare.")
         else:
@@ -146,13 +195,13 @@ if emp_id and month:
 
         # === Motivation Based on Current Score ===
         if current_score >= 4.5:
-            st.success("🌟 Excellent work! You're setting the benchmark for the team!")
+            st.success("Excellent work! You're setting the benchmark for the team.")
         elif current_score >= 4.0:
-            st.info("💪 Great job! A little more polish and you're at the top!")
+            st.info("Great job! A little more polish and you're at the top.")
         elif current_score >= 3.0:
-            st.warning("🚀 You're doing well! Keep pushing and aim for that 4+ next month!")
+            st.warning("You're doing well! Keep pushing and aim for that 4+ next month.")
         else:
-            st.error("🔁 Let’s improve together. You’ve got what it takes to bounce back!")
+            st.error("Let’s improve together. You’ve got what it takes to bounce back.")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
