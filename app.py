@@ -79,7 +79,10 @@ st.title("📊 KPI Dashboard for Champs")
 
 # === Input Section ===
 emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
-month = st.selectbox("Select Month", sorted(df['Month'].unique()))
+month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+].index(m)))
 
 # === Result Section ===
 if emp_id and month:
@@ -115,7 +118,11 @@ if emp_id and month:
         st.metric("Grand Total KPI", f"{current_score}")
         
         # === Compare with Previous Month ===
-        all_months = sorted(df['Month'].unique())
+        month_order = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]
+        all_months = [m for m in month_order if m in df['Month'].unique()]
         current_index = all_months.index(month)
 
         if current_index > 0:
