@@ -112,7 +112,6 @@ if emp_id and selection:
                 trend = "improved" if delta > 0 else "dropped"
                 st.success(f"You {trend} by {delta:+} points since last month ({prev_month})!")
 
-                # Motivation
                 if grand_total >= 4.5:
                     st.info("Outstanding performance! Keep setting the benchmark.")
                 elif grand_total >= 4:
@@ -146,9 +145,16 @@ if emp_id and selection:
 
             avg_cols = ["AHT", "Hold", "Wrap", "CSAT Resolution", "CSAT Behaviour"]
             for col in avg_cols:
-                weekly_data[col] = pd.to_numeric(weekly_data[col], errors="coerce")
+                weekly_data[col] = pd.to_timedelta(weekly_data[col], errors="coerce") if col in ["AHT", "Hold", "Wrap"] else pd.to_numeric(weekly_data[col].str.replace('%',''), errors="coerce")
 
-            avg_vals = weekly_data[avg_cols].mean().round(2)
+            avg_vals = {}
+            for col in avg_cols:
+                if col in ["AHT", "Hold", "Wrap"]:
+                    avg = weekly_data[col].mean()
+                    avg_vals[col] = str(avg).split(" ")[-1] if pd.notnull(avg) else "N/A"
+                else:
+                    avg = weekly_data[col].mean().round(2)
+                    avg_vals[col] = f"{avg}%" if pd.notnull(avg) else "N/A"
 
             table = [["Total Calls Handled", "Call Count", sum_call, "Count"]]
             table += [[f"Average {col}", col, avg_vals[col], ""] for col in avg_cols]
