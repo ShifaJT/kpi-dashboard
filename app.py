@@ -139,7 +139,7 @@ if emp_id and selection:
             def avg_time(col):
                 times = pd.to_timedelta(weekly_data[col], errors="coerce")
                 avg = times.mean()
-                return str(avg).split('.')[0] if pd.notnull(avg) else "N/A"
+                return str(avg.components.hours).zfill(2) + ":" + str(avg.components.minutes).zfill(2) + ":" + str(avg.components.seconds).zfill(2) if pd.notnull(avg) else "N/A"
 
             def avg_pct(col):
                 return f"{pd.to_numeric(weekly_data[col].str.replace('%',''), errors='coerce').mean():.2f}%"
