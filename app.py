@@ -4,7 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # === CONFIG ===
-SHEET_NAME = "KPI"
+SHEET_NAME = "KPI Month"
 SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
 
 # === Google Auth from Secrets ===
