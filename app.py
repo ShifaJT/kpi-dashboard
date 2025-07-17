@@ -42,8 +42,16 @@ if view_type == "Month":
 elif view_type == "Week":
     selection = st.selectbox("Select Week", sorted(daily_df['Week'].unique()))
 elif view_type == "Day":
-    parsed_dates = sorted(daily_df['Date'].unique(), key=lambda x: parser.parse(x))
-    formatted_dates = [parser.parse(x).strftime("%d-%m-%Y") for x in parsed_dates]
+    valid_dates = []
+    for val in daily_df['Date'].unique():
+        try:
+            dt = parser.parse(val, fuzzy=False)
+            valid_dates.append(dt)
+        except (parser.ParserError, TypeError, ValueError):
+            continue
+
+    valid_dates = sorted(set(valid_dates))
+    formatted_dates = [dt.strftime("%d-%m-%Y") for dt in valid_dates]
     selection = st.selectbox("Select Date", formatted_dates)
 
 if emp_id and selection:
@@ -142,8 +150,7 @@ if emp_id and selection:
                 times = pd.to_timedelta(weekly_data[col], errors="coerce")
                 avg = times.mean()
                 if pd.notnull(avg):
-                    total_seconds = int(avg.total_seconds())
-                    return str(timedelta(seconds=total_seconds))
+                    return str(avg).split()[2] if "days" in str(avg) else str(avg)
                 return "N/A"
 
             def avg_pct(col):
