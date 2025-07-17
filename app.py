@@ -3,6 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
+from dateutil import parser
 
 # === CONFIG ===
 SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
@@ -41,7 +42,9 @@ if view_type == "Month":
 elif view_type == "Week":
     selection = st.selectbox("Select Week", sorted(daily_df['Week'].unique()))
 elif view_type == "Day":
-    selection = st.selectbox("Select Date", sorted(daily_df['Date'].unique(), key=lambda x: datetime.strptime(x, "%d-%m-%Y")))
+    parsed_dates = sorted(daily_df['Date'].unique(), key=lambda x: parser.parse(x))
+    formatted_dates = [parser.parse(x).strftime("%d-%m-%Y") for x in parsed_dates]
+    selection = st.selectbox("Select Date", formatted_dates)
 
 if emp_id and selection:
     if view_type == "Month":
@@ -88,7 +91,6 @@ if emp_id and selection:
             grand_total = emp_data.get("Grand Total", 0)
             st.metric("Grand Total KPI", grand_total)
 
-            # Previous month comparison
             prev_data = monthly_df[(monthly_df["EMP ID"].astype(str) == emp_id)]
             prev_data = prev_data.dropna(subset=["Month"])
             prev_data["Month_dt"] = prev_data["Month"].apply(lambda x: datetime.strptime(x, "%B"))
@@ -139,7 +141,10 @@ if emp_id and selection:
             def avg_time(col):
                 times = pd.to_timedelta(weekly_data[col], errors="coerce")
                 avg = times.mean()
-                return str(avg.components.hours).zfill(2) + ":" + str(avg.components.minutes).zfill(2) + ":" + str(avg.components.seconds).zfill(2) if pd.notnull(avg) else "N/A"
+                if pd.notnull(avg):
+                    total_seconds = int(avg.total_seconds())
+                    return str(timedelta(seconds=total_seconds))
+                return "N/A"
 
             def avg_pct(col):
                 return f"{pd.to_numeric(weekly_data[col].str.replace('%',''), errors='coerce').mean():.2f}%"
@@ -164,7 +169,8 @@ if emp_id and selection:
 
     elif view_type == "Day":
         df = daily_df
-        daily_data = df[(df['EMP ID'].astype(str) == emp_id) & (df['Date'] == selection)]
+        selected_raw_date = parser.parse(selection).strftime("%-m/%-d/%Y")
+        daily_data = df[(df['EMP ID'].astype(str) == emp_id) & (df['Date'] == selected_raw_date)]
 
         if daily_data.empty:
             st.warning("No daily data found.")
