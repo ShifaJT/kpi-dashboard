@@ -4,7 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # === CONFIG ===
-MONTHLY_SHEET_NAME = "KPI"
+MONTHLY_SHEET_NAME = "KPI Month"
 DAILY_SHEET_NAME = "KPI Day"
 SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
 
