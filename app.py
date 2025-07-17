@@ -69,14 +69,14 @@ if emp_id and month:
         # === Performance Table ===
         st.subheader("🔹 Performance Metrics")
         perf_map = [
-            ("Average hold time used", "Hold", "HH:MM:SS"),
-            ("Average time taken to wrap the call", "Wrap", "HH:MM:SS"),
-            ("Average duration of champ using auto on", "Auto-On", "HH:MM:SS"),
+            ("Avg hold time used", "Hold", "HH:MM:SS"),
+            ("Avg time taken to wrap the call", "Wrap", "HH:MM:SS"),
+            ("Avg duration of champ using auto on", "Auto-On", "HH:MM:SS"),
             ("Shift adherence for the month", "Schedule Adherence", "Percentage"),
             ("Customer feedback on resolution given", "Resolution CSAT", "Percentage"),
             ("Customer feedback on champ behaviour", "Agent Behaviour", "Percentage"),
-            ("Average Quality Score achieved for the month", "Quality", "Percentage"),
-            ("Process knowledge test", "PKT", "Percentage"),
+            ("Avg Quality Score achieved for the month", "Quality", "Percentage"),
+            ("Process Knowledge Test", "PKT", "Percentage"),
             ("Number of sick and unplanned leaves", "SL + UPL", "Days"),
             ("Number of days logged in", "LOGINS", "Days"),
         ]
