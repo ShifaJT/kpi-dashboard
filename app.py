@@ -1,127 +1,78 @@
 import streamlit as st
 import pandas as pd
-from google.oauth2 import service_account
 import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import calendar
 
-# Setup connection
-creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=["https://www.googleapis.com/auth/spreadsheets"])
+# Set page config
+st.set_page_config(page_title="KPI Dashboard for Champs", layout="centered")
+st.title("KPI Dashboard for Champs")
+
+# Google Sheets Authentication
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
 client = gspread.authorize(creds)
 
-# Load data from Google Sheets
-sheet = client.open("YTD KPI Sheet")
+# Open the spreadsheet using key
+sheet = client.open_by_key("19aDfELEExMn0loj_w6D69ngGG4haEm6IsgqpxJC1OAA")
 kpi_month_df = pd.DataFrame(sheet.worksheet("KPI Month").get_all_records())
 kpi_day_df = pd.DataFrame(sheet.worksheet("KPI Day").get_all_records())
-csat_df = pd.DataFrame(sheet.worksheet("CSAT Score").get_all_records())
+csat_score_df = pd.DataFrame(sheet.worksheet("CSAT Score").get_all_records())
 
-# Preprocess KPI Day date column
-kpi_day_df['Date'] = pd.to_datetime(kpi_day_df['Date'], format='%m/%d/%Y')
+# Input EMP ID
+emp_id = st.text_input("Enter EMP ID")
 
-# Page config
-st.set_page_config(page_title="KPI Dashboard", layout="centered")
-
-st.title("📊 KPI Dashboard")
-
-# Input: EMP ID
-emp_id = st.text_input("Enter your EMP ID:")
-
-# Input: View Type
-view_type = st.selectbox("Select View", ["Month", "Week", "Day"])
-
-# Get unique values based on view
-if view_type == "Month":
-    options = kpi_month_df['Month'].unique()
-elif view_type == "Week":
-    options = sorted(kpi_day_df['Week'].unique())
-else:
-    options = kpi_day_df['Date'].dt.strftime('%Y-%m-%d').unique()
-
-# Select specific value
-selected_option = st.selectbox(f"Select {view_type}", options)
-
-# Filter based on selected view
 if emp_id:
-    if view_type == "Month":
-        data = kpi_month_df[(kpi_month_df['EMP ID'] == emp_id) & (kpi_month_df['Month'] == selected_option)]
-    elif view_type == "Day":
-        selected_date = pd.to_datetime(selected_option)
-        data = kpi_day_df[(kpi_day_df['EMP ID'] == emp_id) & (kpi_day_df['Date'] == selected_date)]
+    view_type = st.selectbox("Select View Type", ["Day", "Week", "Month"])
+
+    if view_type == "Day":
+        try:
+            kpi_day_df["Date"] = pd.to_datetime(kpi_day_df["Date"], format="%m/%d/%Y", errors="coerce")
+            available_dates = kpi_day_df.loc[kpi_day_df['EMP ID'] == int(emp_id), "Date"].dropna().unique()
+            if len(available_dates) == 0:
+                st.warning("No daily data found.")
+            else:
+                selected_date = st.date_input("Select Date", value=pd.to_datetime("today"))
+                selected_data = kpi_day_df[(kpi_day_df['EMP ID'] == int(emp_id)) & (kpi_day_df['Date'] == pd.to_datetime(selected_date))]
+                if selected_data.empty:
+                    st.warning("No daily data found for this date.")
+                else:
+                    st.write("### Day View Data")
+                    st.dataframe(selected_data)
+        except Exception as e:
+            st.error(f"Error loading daily data: {e}")
+
     elif view_type == "Week":
-        week_data = kpi_day_df[(kpi_day_df['EMP ID'] == emp_id) & (kpi_day_df['Week'].astype(str) == str(selected_option))]
-        if not week_data.empty:
-            # Aggregate
-            agg_data = {
-                'Call Count': week_data['Call Count'].astype(float).sum(),
-                'AHT': pd.to_timedelta(week_data['AHT']).mean(),
-                'Hold': pd.to_timedelta(week_data['Hold']).mean(),
-                'Wrap': pd.to_timedelta(week_data['Wrap']).mean(),
-            }
-            data = pd.DataFrame([agg_data])
-            # Add CSAT from csat_df
-            csat_row = csat_df[(csat_df['EMP ID'] == emp_id) & (csat_df['Week'].astype(str) == str(selected_option))]
-            if not csat_row.empty:
-                data['CSAT Resolution'] = csat_row.iloc[0]['CSAT Resolution']
-                data['CSAT Behaviour'] = csat_row.iloc[0]['CSAT Behaviour']
+        try:
+            kpi_day_df["Week"] = kpi_day_df["Week"].astype(str)
+            week_options = sorted(kpi_day_df.loc[kpi_day_df['EMP ID'] == int(emp_id), "Week"].dropna().unique())
+            selected_week = st.selectbox("Select Week", week_options)
+
+            week_data = kpi_day_df[(kpi_day_df['EMP ID'] == int(emp_id)) & (kpi_day_df['Week'] == selected_week)]
+            csat_week_data = csat_score_df[(csat_score_df['EMP ID'] == int(emp_id)) & (csat_score_df['Week'] == selected_week)]
+
+            if week_data.empty and csat_week_data.empty:
+                st.warning("No weekly data found for this employee and week.")
             else:
-                data['CSAT Resolution'] = 'N/A'
-                data['CSAT Behaviour'] = 'N/A'
-        else:
-            data = pd.DataFrame()
+                st.write("### Week View Data")
+                # Aggregate metrics
+                numeric_cols = ["Call Count", "AHT", "Hold", "Wrap"]
+                week_agg = week_data[numeric_cols].apply(pd.to_numeric, errors='coerce').mean().to_frame(name="Average").T
+                week_agg["CSAT Resolution"] = csat_week_data["CSAT Resolution"].values[0] if not csat_week_data.empty else "NA"
+                week_agg["CSAT Behaviour"] = csat_week_data["CSAT Behaviour"].values[0] if not csat_week_data.empty else "NA"
+                st.dataframe(week_agg)
+        except Exception as e:
+            st.error(f"Error loading weekly data: {e}")
 
-    # Show Performance Table
-    if not data.empty:
-        st.subheader("📈 Performance")
-        performance = {
-            "Description": ["Calls", "AHT", "Hold", "Wrap", "CSAT Resolution", "CSAT Behaviour"],
-            "Metric Name": ["Call Count", "AHT", "Hold", "Wrap", "CSAT Resolution", "CSAT Behaviour"],
-            "Value": [data[col].values[0] if col in data.columns else 'N/A' for col in ["Call Count", "AHT", "Hold", "Wrap", "CSAT Resolution", "CSAT Behaviour"]],
-            "Unit": ["count", "HH:MM:SS", "HH:MM:SS", "HH:MM:SS", "%", "%"]
-        }
-        st.table(pd.DataFrame(performance))
-
-        # Show KPI section (only for Monthly view)
-        if view_type == "Month":
-            st.subheader("🧮 KPI Scorecard")
-            kpi_metrics = [
-                {"KPI Metrics": "Product Knowledge Test", "Weightage": "20%", "Score": data["PKT"].values[0]},
-                {"KPI Metrics": "CSAT (Resolution)", "Weightage": "40%", "Score": data["CSAT Resolution Score"].values[0]},
-                {"KPI Metrics": "CSAT (Agent Behaviour)", "Weightage": "20%", "Score": data["CSAT Behaviour Score"].values[0]},
-                {"KPI Metrics": "Quality", "Weightage": "20%", "Score": data["Quality Score"].values[0]},
-            ]
-            st.table(pd.DataFrame(kpi_metrics)[["Weightage", "KPI Metrics", "Score"]])
-
-            # Previous month comparison
-            all_months = list(kpi_month_df['Month'].unique())
-            if len(all_months) > 1 and selected_option in all_months:
-                current_index = all_months.index(selected_option)
-                if current_index > 0:
-                    prev_month = all_months[current_index - 1]
-                    prev_data = kpi_month_df[(kpi_month_df['EMP ID'] == emp_id) & (kpi_month_df['Month'] == prev_month)]
-                    if not prev_data.empty:
-                        prev_score = prev_data["Grand Total"].values[0]
-                        curr_score = data["Grand Total"].values[0]
-                        diff = round(curr_score - prev_score, 2)
-                        symbol = "⬆️" if diff >= 0 else "⬇️"
-                        st.markdown(f"### 📊 Grand Total: **{curr_score}** ({symbol} {abs(diff)} from {prev_month})")
-
-            # Motivation
-            score = data["Grand Total"].values[0]
-            if score >= 85:
-                msg = "🌟 Excellent! Keep up the great work!"
-            elif score >= 70:
-                msg = "👍 Good job! Aim higher next month."
+    elif view_type == "Month":
+        try:
+            month_options = sorted(kpi_month_df.loc[kpi_month_df['EMP ID'] == int(emp_id), "Month"].unique())
+            selected_month = st.selectbox("Select Month", month_options)
+            selected_data = kpi_month_df[(kpi_month_df['EMP ID'] == int(emp_id)) & (kpi_month_df['Month'] == selected_month)]
+            if selected_data.empty:
+                st.warning("No monthly data found.")
             else:
-                msg = "⚠️ Let’s improve. You got this!"
-            st.markdown(f"#### 💡 {msg}")
-
-            # Target Committed
-            st.subheader("🎯 Target Committed")
-            st.markdown(f"""
-            - **PKT**: {data.get("Target Committed for PKT", ['N/A'])[0]}
-            - **CSAT (Agent Behaviour)**: {data.get("Target Committed for CSAT (Agent Behaviour)", ['N/A'])[0]}
-            - **Quality**: {data.get("Target Committed for Quality", ['N/A'])[0]}
-            """)
-
-    else:
-        st.warning("No data found for the selected EMP ID and date/week/month.")
+                st.write("### Month View Data")
+                st.dataframe(selected_data)
+        except Exception as e:
+            st.error(f"Error loading monthly data: {e}")
