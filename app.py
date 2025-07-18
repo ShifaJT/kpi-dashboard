@@ -3,12 +3,12 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
-from dateutil import parser
 
 # === CONFIG ===
 SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
 MONTHLY_SHEET_NAME = "KPI Month"
 DAILY_SHEET_NAME = "KPI Day"
+CSAT_SHEET_NAME = "CSAT Score"
 
 # === Google Auth ===
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
@@ -17,19 +17,32 @@ client = gspread.authorize(creds)
 sheet = client.open_by_key(SHEET_ID)
 monthly_ws = sheet.worksheet(MONTHLY_SHEET_NAME)
 daily_ws = sheet.worksheet(DAILY_SHEET_NAME)
+csat_ws = sheet.worksheet(CSAT_SHEET_NAME)
 
 @st.cache_data
 def load_monthly_data():
     data = monthly_ws.get_all_records()
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    df.columns = df.columns.str.strip()
+    return df
 
 @st.cache_data
 def load_daily_data():
     data = daily_ws.get_all_records()
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    df.columns = df.columns.str.strip()
+    return df
+
+@st.cache_data
+def load_csat_data():
+    data = csat_ws.get_all_records()
+    df = pd.DataFrame(data)
+    df.columns = df.columns.str.strip()
+    return df
 
 monthly_df = load_monthly_data()
 daily_df = load_daily_data()
+csat_df = load_csat_data()
 
 st.title("KPI Dashboard for Champs")
 
@@ -45,13 +58,12 @@ elif view_type == "Day":
     valid_dates = []
     for val in daily_df['Date'].unique():
         try:
-            dt = parser.parse(val, fuzzy=False)
+            dt = datetime.strptime(val.strip(), "%m/%d/%Y")
             valid_dates.append(dt)
-        except (parser.ParserError, TypeError, ValueError):
+        except (ValueError, TypeError):
             continue
 
-    valid_dates = sorted(set(valid_dates))
-    formatted_dates = [dt.strftime("%d-%m-%Y") for dt in valid_dates]
+    formatted_dates = [dt.strftime("%d-%m-%Y") for dt in sorted(set(valid_dates))]
     selection = st.selectbox("Select Date", formatted_dates)
 
 if emp_id and selection:
@@ -149,18 +161,20 @@ if emp_id and selection:
             def avg_time(col):
                 times = pd.to_timedelta(weekly_data[col], errors="coerce")
                 avg = times.mean()
-                if pd.notnull(avg):
-                    return str(avg).split()[2] if "days" in str(avg) else str(avg)
-                return "N/A"
-
-            def avg_pct(col):
-                return f"{pd.to_numeric(weekly_data[col].str.replace('%',''), errors='coerce').mean():.2f}%"
+                return str(avg).split()[2] if pd.notnull(avg) and "days" in str(avg) else str(avg) if pd.notnull(avg) else "N/A"
 
             avg_aht = avg_time("AHT")
             avg_hold = avg_time("Hold")
             avg_wrap = avg_time("Wrap")
-            avg_res = avg_pct("CSAT Resolution")
-            avg_beh = avg_pct("CSAT Behaviour")
+
+            csat_week_data = csat_df[(csat_df['EMP ID'].astype(str) == emp_id) & (csat_df['Week'] == selection)]
+            if not csat_week_data.empty:
+                csat_week_data = csat_week_data.iloc[0]
+                avg_res = csat_week_data.get("CSAT Resolution", "N/A")
+                avg_beh = csat_week_data.get("CSAT Behaviour", "N/A")
+            else:
+                avg_res = "N/A"
+                avg_beh = "N/A"
 
             st.subheader("🔹 Weekly Performance")
             perf_table = [
@@ -168,16 +182,15 @@ if emp_id and selection:
                 ["Average AHT", "AHT", avg_aht, ""],
                 ["Average Hold", "Hold", avg_hold, ""],
                 ["Average Wrap", "Wrap", avg_wrap, ""],
-                ["Average CSAT Resolution", "CSAT Resolution", avg_res, "%"],
-                ["Average CSAT Behaviour", "CSAT Behaviour", avg_beh, "%"]
+                ["Weekly CSAT Resolution", "CSAT Resolution", avg_res, "%"],
+                ["Weekly CSAT Behaviour", "CSAT Behaviour", avg_beh, "%"]
             ]
             perf_df = pd.DataFrame(perf_table, columns=["Description", "Metric Name", "Value", "Unit"])
             st.dataframe(perf_df, use_container_width=True)
 
     elif view_type == "Day":
-        df = daily_df
-        selected_raw_date = parser.parse(selection).strftime("%-m/%-d/%Y")
-        daily_data = df[(df['EMP ID'].astype(str) == emp_id) & (df['Date'] == selected_raw_date)]
+        selected_raw_date = datetime.strptime(selection, "%d-%m-%Y").strftime("%-m/%-d/%Y")
+        daily_data = daily_df[(daily_df['EMP ID'].astype(str) == emp_id) & (daily_df['Date'] == selected_raw_date)]
 
         if daily_data.empty:
             st.warning("No daily data found.")
