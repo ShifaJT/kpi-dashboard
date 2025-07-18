@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # Set page config
@@ -9,12 +9,12 @@ st.set_page_config(page_title="KPI Dashboard for Champs", layout="centered")
 st.title("KPI Dashboard for Champs")
 
 # Google Sheets Authentication
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
-client = gspread.authorize(creds)
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+credentials = Credentials.from_service_account_file("creds.json", scopes=SCOPES)
+gc = gspread.authorize(credentials)
 
 # Open the spreadsheet using key
-sheet = client.open_by_key("19aDfELEExMn0loj_w6D69ngGG4haEm6IsgqpxJC1OAA")
+sheet = gc.open_by_key("19aDfELEExMn0loj_w6D69ngGG4haEm6IsgqpxJC1OAA")
 kpi_month_df = pd.DataFrame(sheet.worksheet("KPI Month").get_all_records())
 kpi_day_df = pd.DataFrame(sheet.worksheet("KPI Day").get_all_records())
 csat_score_df = pd.DataFrame(sheet.worksheet("CSAT Score").get_all_records())
@@ -55,7 +55,6 @@ if emp_id:
                 st.warning("No weekly data found for this employee and week.")
             else:
                 st.write("### Week View Data")
-                # Aggregate metrics
                 numeric_cols = ["Call Count", "AHT", "Hold", "Wrap"]
                 week_agg = week_data[numeric_cols].apply(pd.to_numeric, errors='coerce').mean().to_frame(name="Average").T
                 week_agg["CSAT Resolution"] = csat_week_data["CSAT Resolution"].values[0] if not csat_week_data.empty else "NA"
