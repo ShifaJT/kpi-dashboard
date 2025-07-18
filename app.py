@@ -1,209 +1,148 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 import gspread
-from google.oauth2.service_account import Credentials
-from datetime import datetime, timedelta
+from oauth2client.service_account import ServiceAccountCredentials
 
-# === CONFIG ===
-SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
-MONTHLY_SHEET_NAME = "KPI Month"
-DAILY_SHEET_NAME = "KPI Day"
-CSAT_SHEET_NAME = "CSAT Score"
+st.set_page_config(page_title="KPI Dashboard for Champs", layout="wide")
 
-# === Google Auth ===
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=SCOPES)
+# Google Sheets auth
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
 client = gspread.authorize(creds)
-sheet = client.open_by_key(SHEET_ID)
-monthly_ws = sheet.worksheet(MONTHLY_SHEET_NAME)
-daily_ws = sheet.worksheet(DAILY_SHEET_NAME)
-csat_ws = sheet.worksheet(CSAT_SHEET_NAME)
 
-@st.cache_data
-def load_monthly_data():
-    data = monthly_ws.get_all_records()
-    df = pd.DataFrame(data)
-    df.columns = df.columns.str.strip()
-    return df
+# Sheet names
+sheet_kpi_month = client.open("KPI Dashboard").worksheet("KPI Month")
+sheet_kpi_day = client.open("KPI Dashboard").worksheet("KPI Day")
+sheet_csat = client.open("KPI Dashboard").worksheet("CSAT Score")
 
-@st.cache_data
-def load_daily_data():
-    data = daily_ws.get_all_records()
-    df = pd.DataFrame(data)
-    df.columns = df.columns.str.strip()
-    return df
+# Load data
+def load_data():
+    kpi_month_df = pd.DataFrame(sheet_kpi_month.get_all_records())
+    daily_df = pd.DataFrame(sheet_kpi_day.get_all_records())
+    csat_df = pd.DataFrame(sheet_csat.get_all_records())
+    return kpi_month_df, daily_df, csat_df
 
-@st.cache_data
-def load_csat_data():
-    data = csat_ws.get_all_records()
-    df = pd.DataFrame(data)
-    df.columns = df.columns.str.strip()
-    return df
-
-monthly_df = load_monthly_data()
-daily_df = load_daily_data()
-csat_df = load_csat_data()
+kpi_month_df, daily_df, csat_df = load_data()
 
 st.title("KPI Dashboard for Champs")
 
 emp_id = st.text_input("Enter EMP ID")
-view_type = st.selectbox("Select View Type", ["Month", "Week", "Day"])
 
-selection = None
-if view_type == "Month":
-    selection = st.selectbox("Select Month", sorted(monthly_df['Month'].unique(), key=lambda x: datetime.strptime(x, "%B")))
-elif view_type == "Week":
-    selection = st.selectbox("Select Week", sorted(daily_df['Week'].unique()))
-elif view_type == "Day":
-    valid_dates = []
-    for val in daily_df['Date'].unique():
-        try:
-            dt = datetime.strptime(val.strip(), "%m/%d/%Y")
-            valid_dates.append(dt)
-        except (ValueError, TypeError):
-            continue
+if emp_id:
+    view_type = st.selectbox("Select View Type", ["Month", "Week", "Day"])
 
-    formatted_dates = [dt.strftime("%d-%m-%Y") for dt in sorted(set(valid_dates))]
-    selection = st.selectbox("Select Date", formatted_dates)
-
-if emp_id and selection:
     if view_type == "Month":
-        df = monthly_df
-        emp_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == selection)]
+        months = kpi_month_df[kpi_month_df['EMP ID'].astype(str) == emp_id]['Month'].unique()
+        selection = st.selectbox("Select Month", sorted(months))
 
-        if emp_data.empty:
-            st.warning("No data found.")
-        else:
-            emp_data = emp_data.iloc[0]
-
-            st.subheader("🔹 Performance Metrics")
-            perf_table = [
-                ["Average hold used", "Hold", emp_data.get("Hold", "N/A"), "HH:MM:SS"],
-                ["Average time taken to wrap the call", "Wrap", emp_data.get("Wrap", "N/A"), "HH:MM:SS"],
-                ["Average duration of champ using auto on", "Auto-On", emp_data.get("Auto-On", "N/A"), "HH:MM:SS"],
-                ["Shift adherence for the month", "Schedule Adherence", emp_data.get("Schedule Adherence", "N/A"), "%"],
-                ["Customer feedback on resolution given", "Resolution CSAT", emp_data.get("Resolution CSAT", "N/A"), "%"],
-                ["customer feedback on champ behaviour", "Agent Behaviour", emp_data.get("Agent Behaviour", "N/A"), "%"],
-                ["Average Quality Score achieved for the month", "Quality", emp_data.get("Quality", "N/A"), "%"],
-                ["Process knowledge test", "PKT", emp_data.get("PKT", "N/A"), "%"],
-                ["Number of sick and unplanned leaves", "SL + UPL", emp_data.get("SL + UPL", "N/A"), "Days"],
-                ["Number of days logged in", "LOGINS", emp_data.get("LOGINS", "N/A"), "Days"],
+        if selection:
+            filtered = kpi_month_df[
+                (kpi_month_df['EMP ID'].astype(str) == emp_id) &
+                (kpi_month_df['Month'] == selection)
             ]
-            perf_df = pd.DataFrame(perf_table, columns=["Description", "Metric Name", "Value", "Unit"])
-            st.dataframe(perf_df, use_container_width=True)
-
-            st.subheader("✅ KPI Scores")
-            kpi_weights = {
-                "Hold KPI Score": 0,
-                "Wrap KPI Score": 0,
-                "Auto-On KPI Score": 30,
-                "Schedule Adherence KPI Score": 10,
-                "Resolution CSAT KPI Score": 10,
-                "Agent Behaviour KPI Score": 20,
-                "Quality KPI Score": 20,
-                "PKT KPI Score": 10,
-            }
-            kpi_data = [[f"{weight}%", kpi, emp_data.get(kpi, "N/A")] for kpi, weight in kpi_weights.items()]
-            kpi_df = pd.DataFrame(kpi_data, columns=["Weightage", "KPI Metrics", "Score"])
-            st.dataframe(kpi_df, use_container_width=True)
-
-            st.subheader("🏁 Grand Total")
-            grand_total = emp_data.get("Grand Total", 0)
-            st.metric("Grand Total KPI", grand_total)
-
-            prev_data = monthly_df[(monthly_df["EMP ID"].astype(str) == emp_id)]
-            prev_data = prev_data.dropna(subset=["Month"])
-            prev_data["Month_dt"] = prev_data["Month"].apply(lambda x: datetime.strptime(x, "%B"))
-            prev_data = prev_data.sort_values("Month_dt")
-            current_month_dt = datetime.strptime(selection, "%B")
-
-            prev_rows = prev_data[prev_data["Month_dt"] < current_month_dt]
-            if not prev_rows.empty:
-                last_month_row = prev_rows.iloc[-1]
-                prev_month = last_month_row["Month"]
-                prev_total = last_month_row.get("Grand Total", 0)
-                delta = round(grand_total - prev_total, 2)
-                trend = "improved" if delta > 0 else "dropped"
-                st.success(f"You {trend} by {delta:+} points since last month ({prev_month})!")
-
-                if grand_total >= 4.5:
-                    st.info("Outstanding performance! Keep setting the benchmark.")
-                elif grand_total >= 4:
-                    st.info("Great job! Let's aim even higher.")
-                elif grand_total >= 3:
-                    st.info("You're on the right track. Keep pushing!")
-                else:
-                    st.info("Let’s work together and improve next month!")
-
-            st.subheader("🎯 Target Committed for Next Month")
-            tc_pkt = emp_data.get("Target Committed for PKT", "N/A")
-            tc_csat = emp_data.get("Target Committed for CSAT (Agent Behaviour)", "N/A")
-            tc_quality = emp_data.get("Target Committed for Quality", "N/A")
-
-            if any(val != "N/A" for val in [tc_pkt, tc_csat, tc_quality]):
-                st.write(f"**Target Committed for PKT**: {tc_pkt}")
-                st.write(f"**Target Committed for CSAT (Agent Behaviour)**: {tc_csat}")
-                st.write(f"**Target Committed for Quality**: {tc_quality}")
+            if filtered.empty:
+                st.warning("No data found for the selected month.")
             else:
-                st.warning("No target data available.")
+                row = filtered.iloc[0]
+                st.subheader("🔹 Monthly Performance")
+                perf_table = [
+                    ["Average Hold Time", "Hold", row['Hold'], "sec"],
+                    ["Average Wrap Time", "Wrap", row['Wrap'], "sec"],
+                    ["Auto-On Compliance", "Auto-On", row['Auto-On'], "%"],
+                    ["Schedule Adherence", "Schedule Adherence", row['Schedule Adherence'], "%"],
+                    ["CSAT Resolution", "Resolution CSAT", row['Resolution CSAT'], "%"],
+                    ["CSAT Behaviour", "Agent Behaviour", row['Agent Behaviour'], "%"],
+                    ["Quality Score", "Quality", row['Quality'], "%"],
+                    ["PKT", "PKT", row['PKT'], "%"],
+                    ["SL + UPL", "SL + UPL", row['SL + UPL'], "%"],
+                    ["Login Count", "LOGINS", row['LOGINS'], ""]
+                ]
+                perf_df = pd.DataFrame(perf_table, columns=["Description", "Metric Name", "Value", "Unit"])
+                st.dataframe(perf_df, use_container_width=True)
 
-    elif view_type == "Week":
-        df = daily_df
-        weekly_data = df[(df['EMP ID'].astype(str) == emp_id) & (df['Week'] == selection)]
+                st.subheader("📊 KPI Scores")
+                kpi_table = [
+                    ["Hold", "Hold KPI Score", row['Hold KPI Score']],
+                    ["Wrap", "Wrap KPI Score", row['Wrap KPI Score']],
+                    ["Auto-On", "Auto-On KPI Score", row['Auto-On KPI Score']],
+                    ["Schedule Adherence", "Schedule Adherence KPI Score", row['Schedule Adherence KPI Score']],
+                    ["Resolution CSAT", "Resolution CSAT KPI Score", row['Resolution CSAT KPI Score']],
+                    ["Agent Behaviour", "Agent Behaviour KPI Score", row['Agent Behaviour KPI Score']],
+                    ["Quality", "Quality KPI Score", row['Quality KPI Score']],
+                    ["PKT", "PKT KPI Score", row['PKT KPI Score']],
+                    ["Grand Total", "Grand Total", row['Grand Total']]
+                ]
+                kpi_df = pd.DataFrame(kpi_table, columns=["KPI Metrics", "Metric Name", "Score"])
+                st.dataframe(kpi_df, use_container_width=True)
 
-        if weekly_data.empty:
-            st.warning("No weekly data found.")
-        else:
-            weekly_data = weekly_data.replace("", "0").fillna("0")
-            weekly_data["Call Count"] = pd.to_numeric(weekly_data["Call Count"], errors="coerce")
-            sum_call = weekly_data["Call Count"].sum()
-
-            def avg_time(col):
-                times = pd.to_timedelta(weekly_data[col], errors="coerce")
-                avg = times.mean()
-                return str(avg).split()[2] if pd.notnull(avg) and "days" in str(avg) else str(avg) if pd.notnull(avg) else "N/A"
-
-            avg_aht = avg_time("AHT")
-            avg_hold = avg_time("Hold")
-            avg_wrap = avg_time("Wrap")
-
-            csat_week_data = csat_df[(csat_df['EMP ID'].astype(str) == emp_id) & (csat_df['Week'] == selection)]
-            if not csat_week_data.empty:
-                csat_week_data = csat_week_data.iloc[0]
-                avg_res = csat_week_data.get("CSAT Resolution", "N/A")
-                avg_beh = csat_week_data.get("CSAT Behaviour", "N/A")
-            else:
-                avg_res = "N/A"
-                avg_beh = "N/A"
-
-            st.subheader("🔹 Weekly Performance")
-            perf_table = [
-                ["Total Calls Handled", "Call Count", sum_call, "Count"],
-                ["Average AHT", "AHT", avg_aht, ""],
-                ["Average Hold", "Hold", avg_hold, ""],
-                ["Average Wrap", "Wrap", avg_wrap, ""],
-                ["Weekly CSAT Resolution", "CSAT Resolution", avg_res, "%"],
-                ["Weekly CSAT Behaviour", "CSAT Behaviour", avg_beh, "%"]
-            ]
-            perf_df = pd.DataFrame(perf_table, columns=["Description", "Metric Name", "Value", "Unit"])
-            st.dataframe(perf_df, use_container_width=True)
+                st.subheader("🎯 Target Committed")
+                target_table = [
+                    ["Target Committed for PKT", row.get("Target Committed for PKT", "N/A")],
+                    ["Target Committed for CSAT (Agent Behaviour)", row.get("Target Committed for CSAT (Agent Behaviour)", "N/A")],
+                    ["Target Committed for Quality", row.get("Target Committed for Quality", "N/A")]
+                ]
+                target_df = pd.DataFrame(target_table, columns=["Description", "Target"])
+                st.dataframe(target_df, use_container_width=True)
 
     elif view_type == "Day":
-        selected_raw_date = datetime.strptime(selection, "%d-%m-%Y").strftime("%-m/%-d/%Y")
-        daily_data = daily_df[(daily_df['EMP ID'].astype(str) == emp_id) & (daily_df['Date'] == selected_raw_date)]
+        daily_df['Date_parsed'] = pd.to_datetime(daily_df['Date'], format="%m/%d/%Y", errors='coerce')
+        valid_dates = daily_df['Date_parsed'].dropna().dt.strftime("%d-%m-%Y").unique()
+        selection = st.selectbox("Select Date", sorted(valid_dates))
 
-        if daily_data.empty:
-            st.warning("No daily data found.")
-        else:
-            daily_data = daily_data.iloc[0]
-            st.subheader("🔹 Daily Performance")
-            perf_table = [
-                ["Total Calls Handled", "Call Count", daily_data.get("Call Count", "N/A"), "Count"],
-                ["Average AHT", "AHT", daily_data.get("AHT", "N/A"), ""],
-                ["Average Hold", "Hold", daily_data.get("Hold", "N/A"), ""],
-                ["Average Wrap", "Wrap", daily_data.get("Wrap", "N/A"), ""],
-                ["CSAT Resolution", "CSAT Resolution", daily_data.get("CSAT Resolution", "N/A"), "%"],
-                ["CSAT Behaviour", "CSAT Behaviour", daily_data.get("CSAT Behaviour", "N/A"), "%"]
+        if selection:
+            selected_date = datetime.strptime(selection, "%d-%m-%Y").date()
+            filtered_day = daily_df[
+                (daily_df['EMP ID'].astype(str) == emp_id) &
+                (pd.to_datetime(daily_df['Date'], format="%m/%d/%Y", errors='coerce').dt.date == selected_date)
             ]
-            perf_df = pd.DataFrame(perf_table, columns=["Description", "Metric Name", "Value", "Unit"])
-            st.dataframe(perf_df, use_container_width=True)
+
+            if filtered_day.empty:
+                st.warning("No daily data found.")
+            else:
+                daily_data = filtered_day.iloc[0]
+                st.subheader("🔹 Daily Performance")
+                perf_table = [
+                    ["Total Calls Handled", "Call Count", daily_data.get("Call Count", "N/A"), "Count"],
+                    ["Average AHT", "AHT", daily_data.get("AHT", "N/A"), ""],
+                    ["Average Hold", "Hold", daily_data.get("Hold", "N/A"), ""],
+                    ["Average Wrap", "Wrap", daily_data.get("Wrap", "N/A"), ""],
+                    ["CSAT Resolution", "CSAT Resolution", daily_data.get("CSAT Resolution", "N/A"), "%"],
+                    ["CSAT Behaviour", "CSAT Behaviour", daily_data.get("CSAT Behaviour", "N/A"), "%"]
+                ]
+                perf_df = pd.DataFrame(perf_table, columns=["Description", "Metric Name", "Value", "Unit"])
+                st.dataframe(perf_df, use_container_width=True)
+
+    elif view_type == "Week":
+        week_values = daily_df['Week'].dropna().astype(str).unique()
+        selection = st.selectbox("Select Week", sorted(week_values))
+
+        if selection:
+            filtered_week = daily_df[
+                (daily_df['EMP ID'].astype(str) == emp_id) &
+                (daily_df['Week'].astype(str) == selection)
+            ]
+
+            csat_row = csat_df[
+                (csat_df['EMP ID'].astype(str) == emp_id) &
+                (csat_df['Week'].astype(str) == selection)
+            ]
+
+            if filtered_week.empty and csat_row.empty:
+                st.warning("No weekly data found.")
+            else:
+                st.subheader("🔹 Weekly Performance")
+                perf_table = [
+                    ["Total Calls Handled", "Call Count", filtered_week['Call Count'].astype(float).sum(), "Count"],
+                    ["Average AHT", "AHT", filtered_week['AHT'].astype(float).mean(), ""],
+                    ["Average Hold", "Hold", filtered_week['Hold'].astype(float).mean(), ""],
+                    ["Average Wrap", "Wrap", filtered_week['Wrap'].astype(float).mean(), ""]
+                ]
+
+                if not csat_row.empty:
+                    csat_data = csat_row.iloc[0]
+                    perf_table.append(["CSAT Resolution", "CSAT Resolution", csat_data.get("CSAT Resolution", "N/A"), "%"])
+                    perf_table.append(["CSAT Behaviour", "CSAT Behaviour", csat_data.get("CSAT Behaviour", "N/A"), "%"])
+
+                perf_df = pd.DataFrame(perf_table, columns=["Description", "Metric Name", "Value", "Unit"])
+                st.dataframe(perf_df, use_container_width=True)
