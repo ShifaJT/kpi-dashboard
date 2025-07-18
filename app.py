@@ -2,100 +2,136 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
 
-# --- Google Sheets Setup ---
+# --------------------------- GOOGLE SHEET AUTH ---------------------------- #
 SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
-SHEET_URL = f"https://docs.google.com/spreadsheets/d/19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
+# Authenticate with Google Sheets
 credentials = Credentials.from_service_account_file(
     "creds.json",
     scopes=SCOPES
 )
-
 client = gspread.authorize(credentials)
-sheet = client.open_by_key(SHEET_ID)
-kpi_month = sheet.worksheet("KPI Month")
-kpi_day = sheet.worksheet("KPI Day")
-csat_score = sheet.worksheet("CSAT Score")
+sheet_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+sheet = client.open_by_url(sheet_url)
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="KPI Dashboard", layout="wide")
+# --------------------------- HELPER FUNCTIONS ---------------------------- #
+def load_monthly_data(emp_id: str, month: str):
+    worksheet = sheet.worksheet("KPI Month")
+    df = pd.DataFrame(worksheet.get_all_records())
+    emp_data = df[(df['EMP ID'] == emp_id) & (df['Month'] == month)]
+    return emp_data
+
+def load_previous_month_data(emp_id: str, month: str):
+    worksheet = sheet.worksheet("KPI Month")
+    df = pd.DataFrame(worksheet.get_all_records())
+    months_order = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    if month not in months_order:
+        return pd.DataFrame()
+    current_index = months_order.index(month)
+    if current_index == 0:
+        return pd.DataFrame()
+    prev_month = months_order[current_index - 1]
+    emp_data = df[(df['EMP ID'] == emp_id) & (df['Month'] == prev_month)]
+    return emp_data
+
+def get_motivational_quote(score):
+    if score >= 90:
+        return "🌟 Outstanding work! Keep pushing the limits!"
+    elif score >= 75:
+        return "💪 Great job! You're on the path to excellence."
+    elif score >= 60:
+        return "👏 Good effort! Aim a bit higher next time."
+    else:
+        return "🔥 Let’s hustle and level up next month!"
+
+# --------------------------- UI LAYOUT ---------------------------- #
 st.title("📊 KPI Dashboard")
+st.markdown("Enter your Employee ID and Month to view performance.")
 
 emp_id = st.text_input("Enter your EMP ID")
-view_type = st.selectbox("Select View Type", ["Month", "Week", "Day"])
+month = st.selectbox("Select Month", ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"])
 
-if emp_id:
-    df_month = pd.DataFrame(kpi_month.get_all_records())
-    df_day = pd.DataFrame(kpi_day.get_all_records())
-    df_csat = pd.DataFrame(csat_score.get_all_records())
-
-    df_month = df_month[df_month['EMP ID'] == emp_id]
-    df_day = df_day[df_day['EMP ID'] == emp_id]
-    df_csat = df_csat[df_csat['EMP ID'] == emp_id]
-
-    if view_type == "Month":
-        month = st.selectbox("Select Month", df_month['Month'].unique())
-        if month:
-            data = df_month[df_month['Month'] == month]
-            if not data.empty:
-                st.subheader("Performance")
-                perf_cols = ['Call Count', 'AHT', 'Hold', 'Wrap']
-                perf_units = ['calls', 'seconds', 'seconds', 'seconds']
-                for col, unit in zip(perf_cols, perf_units):
-                    val = data[col].values[0]
-                    st.write(f"**{col}**: {val} {unit}")
-
-                st.subheader("KPI Scores")
-                kpi_weights = {
-                    "PKT": 40,
-                    "CSAT (Resolution)": 30,
-                    "CSAT (Agent Behaviour)": 20,
-                    "Quality": 10
-                }
-                for metric, weight in kpi_weights.items():
-                    score = data.get(metric, ["N/A"])[0]
-                    st.write(f"**{metric}** (Weight: {weight}%): {score}")
-
-                st.subheader("Comparison with Previous Month")
-                months = sorted(df_month['Month'].unique())
-                current_index = months.index(month)
-                if current_index > 0:
-                    prev_month = months[current_index - 1]
-                    prev_data = df_month[df_month['Month'] == prev_month]
-                    if not prev_data.empty:
-                        current_score = data['Grand Total KPI'].values[0]
-                        prev_score = prev_data['Grand Total KPI'].values[0]
-                        st.write(f"**{month} KPI**: {current_score}")
-                        st.write(f"**{prev_month} KPI**: {prev_score}")
-
-                st.subheader("Motivational Quote")
-                kpi = data['Grand Total KPI'].values[0]
-                try:
-                    kpi = float(kpi)
-                    if kpi >= 90:
-                        st.success("Excellent work! Keep it up 💪")
-                    elif kpi >= 75:
-                        st.info("You're doing good. Aim for more 🌟")
-                    else:
-                        st.warning("Let's push harder next month 🚀")
-                except:
-                    st.write("KPI score not available")
-
-                st.subheader("Target Committed")
-                for target_col in [
-                    'Target Committed for PKT',
-                    'Target Committed for CSAT (Agent Behaviour)',
-                    'Target Committed for Quality']:
-                    val = data.get(target_col, ["N/A"])[0]
-                    st.write(f"**{target_col}**: {val}")
-            else:
-                st.error("No data found for selected month.")
+if emp_id and month:
+    data = load_monthly_data(emp_id, month)
+    if data.empty:
+        st.warning("No data found for given EMP ID and Month.")
     else:
-        st.warning("Only monthly view is currently supported. Weekly and daily views coming soon.")
+        name = data.iloc[0]['NAME']
+        st.subheader(f"👤 Name: {name}")
+        st.subheader(f"📅 Month: {month}")
+
+        st.markdown("---")
+        st.markdown("### 🔎 Performance Overview")
+        perf_df = pd.DataFrame({
+            "Description": [
+                "Total Calls Handled", "Average Handling Time (AHT)", "Average Hold Time", "Wrap Time"
+            ],
+            "Metric Name": ["Call Count", "AHT", "Hold", "Wrap"],
+            "Value": [
+                data.iloc[0]['Call Count'],
+                data.iloc[0]['AHT'],
+                data.iloc[0]['Hold'],
+                data.iloc[0]['Wrap']
+            ],
+            "Unit": ["calls", "seconds", "seconds", "seconds"]
+        })
+        st.dataframe(perf_df, hide_index=True)
+
+        st.markdown("---")
+        st.markdown("### 🧮 KPI Score Summary")
+
+        kpi_weight = pd.DataFrame({
+            "Weightage": ["40%", "30%", "30%"],
+            "KPI Metrics": ["PKT", "CSAT (Agent Behaviour)", "Quality"],
+            "Score": [
+                data.iloc[0]['PKT Score'],
+                data.iloc[0]['CSAT Behaviour Score'],
+                data.iloc[0]['Quality Score']
+            ]
+        })
+        st.dataframe(kpi_weight, hide_index=True)
+
+        st.markdown("---")
+        st.markdown("### 📈 Comparison with Previous Month")
+        prev = load_previous_month_data(emp_id, month)
+        if not prev.empty:
+            comparison = pd.DataFrame({
+                "KPI": ["PKT", "CSAT (Agent Behaviour)", "Quality", "Grand Total"],
+                f"{month}": [
+                    data.iloc[0]['PKT Score'],
+                    data.iloc[0]['CSAT Behaviour Score'],
+                    data.iloc[0]['Quality Score'],
+                    data.iloc[0]['Grand Total']
+                ],
+                f"Previous Month ({prev.iloc[0]['Month']})": [
+                    prev.iloc[0]['PKT Score'],
+                    prev.iloc[0]['CSAT Behaviour Score'],
+                    prev.iloc[0]['Quality Score'],
+                    prev.iloc[0]['Grand Total']
+                ]
+            })
+            st.dataframe(comparison, hide_index=True)
+        else:
+            st.info("No previous month data available for comparison.")
+
+        st.markdown("---")
+        st.markdown("### 💬 Motivational Message")
+        st.success(get_motivational_quote(data.iloc[0]['Grand Total']))
+
+        st.markdown("---")
+        st.markdown("### 🎯 Target Committed for Next Month")
+        targets = pd.DataFrame({
+            "Target": [
+                "Target Committed for PKT",
+                "Target Committed for CSAT (Agent Behaviour)",
+                "Target Committed for Quality"
+            ],
+            "Value": [
+                data.iloc[0].get("Target Committed for PKT", "N/A"),
+                data.iloc[0].get("Target Committed for CSAT (Agent Behaviour)", "N/A"),
+                data.iloc[0].get("Target Committed for Quality", "N/A")
+            ]
+        })
+        st.dataframe(targets, hide_index=True)
