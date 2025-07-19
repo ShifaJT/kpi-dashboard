@@ -1,228 +1,260 @@
-# === app.py ===
 import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from streamlit_lottie import st_lottie
-import requests
-import random
 
 # === CONFIG ===
+SHEET_NAME = "KPI Month"
 SHEET_ID = "19aDfELEExMn0loj_w6D69ngGG4haEm6lsgqpxJC1OAA"
-SHEET_MONTH = "KPI Month"
-SHEET_DAY = "KPI Day"
-SHEET_CSAT = "CSAT Score"
 
-# === Google Auth ===
+# === Google Auth from Secrets ===
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 creds = Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=SCOPES)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SHEET_ID)
+worksheet = sheet.worksheet(SHEET_NAME)
 
-# === Load Lottie ===
-def load_lottie_url(url):
-    r = requests.get(url)
-    if r.status_code != 200:
-        return None
-    return r.json()
-
-lottie_cheer = load_lottie_url("https://assets2.lottiefiles.com/packages/lf20_snmohqxj.json")
-
-# === Load Data ===
 @st.cache_data
-def load_sheet(name):
-    return pd.DataFrame(sheet.worksheet(name).get_all_records())
+def load_data():
+    data = worksheet.get_all_records()
+    return pd.DataFrame(data)
 
-month_df = load_sheet(SHEET_MONTH)
-day_df = load_sheet(SHEET_DAY)
-csat_df = load_sheet(SHEET_CSAT)
+df = load_data()
+df.columns = df.columns.str.strip()  # Strip spaces from column names
 
-# === UI Styling ===
+# === Styling ===
 st.markdown("""
-    <div style="background: linear-gradient(to right, #0072ff, #00c6ff); padding: 20px 30px; border-radius: 12px; color: white; font-size: 26px; font-weight: bold; margin-bottom: 20px;">
-        🚀 KPI Dashboard for Champs
-    </div>
+    <style>
+    .styled-table {
+        font-size: 16px;
+        color: #111;
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .styled-table th, .styled-table td {
+        border: 1px solid #ddd;
+        padding: 10px 14px;
+        text-align: left;
+    }
+    .styled-table tr:nth-child(even) {
+        background-color: #f8f8f8;
+    }
+    .styled-table th {
+        background-color: #eaeaea;
+        font-weight: bold;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
-# === Time Filter ===
+# === UI Title ===
+st.title(" KPI Dashboard for Champs")
+
+# === Timeframe Filter ===
 time_frame = st.selectbox("Select Timeframe", ["Day", "Week", "Month"])
+emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
 
-# === Month View ===
-if time_frame == "Month":
-    df = month_df
-    emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
-    month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: ["January", "February", "March", "April", "May", "June", "July"].index(m)))
+# === Day Mode ===
+if time_frame == "Day" and emp_id:
+    kpi_day_df = pd.DataFrame(client.open_by_key(SHEET_ID).worksheet("KPI Day").get_all_records())
+    kpi_day_df.columns = kpi_day_df.columns.str.strip()
+    kpi_day_df["Date"] = pd.to_datetime(kpi_day_df["Date"], dayfirst=False)
 
-    if emp_id and month:
-        emp_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == month)]
+    # Filter data for EMP ID
+    emp_day_data = kpi_day_df[kpi_day_df["EMP ID"].astype(str) == emp_id]
 
-        if emp_data.empty:
-            st.warning("No data found for that EMP ID and month.")
-        else:
-            emp_name = emp_data["NAME"].values[0]
-            st.markdown(f"### KPI Data for **{emp_name}** (EMP ID: {emp_id}) | Month: **{month}**")
+    if emp_day_data.empty:
+        st.warning("No daily data found for this EMP ID.")
+    else:
+        available_dates = sorted(emp_day_data["Date"].dt.strftime("%Y-%m-%d").unique())
+        selected_date_str = st.selectbox("Select Date", available_dates)
+        selected_date = pd.to_datetime(selected_date_str)
 
-            st.subheader("Performance Metrics")
-            perf_map = [
-                ("Avg hold time used", "Hold", "HH:MM:SS"),
-                ("Avg time taken to wrap the call", "Wrap", "HH:MM:SS"),
-                ("Avg duration of champ using auto on", "Auto-On", "HH:MM:SS"),
-                ("Shift adherence for the month", "Schedule Adherence", "Percentage"),
-                ("Customer feedback on resolution given", "Resolution CSAT", "Percentage"),
-                ("Customer feedback on champ behaviour", "Agent Behaviour", "Percentage"),
-                ("Avg Quality Score achieved for the month", "Quality", "Percentage"),
-                ("Process Knowledge Test", "PKT", "Percentage"),
-                ("Number of sick and unplanned leaves", "SL + UPL", "Days"),
-                ("Number of days logged in", "LOGINS", "Days"),
-            ]
+        selected_row = emp_day_data[emp_day_data["Date"] == selected_date]
 
-            perf_table = []
-            for desc, metric, unit in perf_map:
-                value = emp_data[metric].values[0] if metric in emp_data else "-"
-                perf_table.append({"Description": desc, "Metric Name": metric, "Value": value, "Unit": unit})
-            st.dataframe(pd.DataFrame(perf_table), use_container_width=True)
+        if not selected_row.empty:
+            row = selected_row.iloc[0]
 
-            st.subheader("KPI Scores")
-            kpi_map = [
-                ("0%", "Hold KPI Score"),
-                ("30%", "Auto-On KPI Score"),
-                ("10%", "Schedule Adherence KPI Score"),
-                ("10%", "Resolution CSAT KPI Score"),
-                ("20%", "Agent Behaviour KPI Score"),
-                ("20%", "Quality KPI Score"),
-                ("10%", "PKT KPI Score")
-            ]
+            # Format time fields
+            def format_time(value):
+                try:
+                    return str(pd.to_timedelta(value)).split(" ")[-1].split(".")[0]
+                except:
+                    return value
 
-            kpi_table = []
-            for weight, kpi_metric in kpi_map:
-                score = emp_data[kpi_metric].values[0] if kpi_metric in emp_data else "-"
-                kpi_table.append({"Weightage": weight, "KPI Metrics": kpi_metric, "Score": score})
-            st.dataframe(pd.DataFrame(kpi_table), use_container_width=True)
+            data_table = pd.DataFrame([
+                {"Metric": "Call Count", "Value": row["Call Count"]},
+                {"Metric": "AHT", "Value": format_time(row["AHT"])},
+                {"Metric": "Hold", "Value": format_time(row["Hold"])},
+                {"Metric": "Wrap", "Value": format_time(row["Wrap"])},
+                {"Metric": "CSAT Resolution", "Value": row["CSAT Resolution"]},
+                {"Metric": "CSAT Behaviour", "Value": row["CSAT Behaviour"]}
+            ])
 
-            st.subheader("Grand Total")
-            current_score = emp_data['Grand Total'].values[0]
-            st.metric("Grand Total KPI", f"{current_score}")
-            if lottie_cheer:
-                st_lottie(lottie_cheer, speed=1, height=200, key="cheer")
+            st.markdown(f"### Daily KPI Data - {selected_date.strftime('%d-%b-%Y')}")
+            st.markdown(data_table.to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
+        else:
+            st.info("No data available for selected date.")
 
-            if current_score >= 4.5:
-                st.success("🌟 Incredible! You’re setting new standards!")
-            elif current_score >= 4.0:
-                st.info("🎯 Great work! Let’s aim for the top.")
-            elif current_score >= 3.0:
-                st.warning("📈 You're doing good! Let's level up next month.")
-            elif current_score >= 2.0:
-                st.warning("⏳ Progress in motion. Consistency is key!")
-            else:
-                st.error("🔥 Don't give up. Big wins come from small efforts.")
+# === Week Mode ===
+if time_frame == "Week" and emp_id:
+    kpi_day_df = pd.DataFrame(client.open_by_key(SHEET_ID).worksheet("KPI Day").get_all_records())
+    kpi_day_df.columns = kpi_day_df.columns.str.strip()
+    csat_df = pd.DataFrame(client.open_by_key(SHEET_ID).worksheet("CSAT Score").get_all_records())
+    csat_df.columns = csat_df.columns.str.strip()
 
-            month_order = ["January", "February", "March", "April", "May", "June", "July"]
-            all_months = [m for m in month_order if m in df['Month'].unique()]
-            current_index = all_months.index(month)
+    available_weeks = sorted(kpi_day_df["Week"].dropna().unique())
+    week_number = st.selectbox("Select Week Number", available_weeks)
 
-            if current_index > 0:
-                prev_month = all_months[current_index - 1]
-                prev_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == prev_month)]
-                if not prev_data.empty:
-                    prev_score = prev_data["Grand Total"].values[0]
-                    diff = round(current_score - prev_score, 2)
-                    if diff > 0:
-                        st.success(f"📊 You improved by +{diff} points from last month ({prev_month})!")
-                    elif diff < 0:
-                        st.warning(f"📉 You dropped by {abs(diff)} points from last month ({prev_month}).")
-                    else:
-                        st.info(f"No change from last month ({prev_month}).")
-                else:
-                    st.info("No data for previous month.")
-            else:
-                st.info("No previous month comparison available.")
+    week_data = kpi_day_df[(kpi_day_df["EMP ID"].astype(str) == emp_id) & (kpi_day_df["Week"] == int(week_number))]
 
-            st.subheader("Target Committed for Next Month")
-            targets = ["Target Committed for PKT", "Target Committed for CSAT (Agent Behaviour)", "Target Committed for Quality"]
-            if all(col in emp_data.columns for col in targets):
-                target_table = emp_data[targets].T.reset_index()
-                target_table.columns = ["Target Metric", "Target"]
-                st.markdown(target_table.to_html(index=False), unsafe_allow_html=True)
-            else:
-                st.info("No target data available.")
+    if week_data.empty:
+        st.warning("No weekly data found for this EMP ID and week.")
+    else:
+        st.markdown(f"### Weekly KPI Data (Week {week_number})")
 
-# === Week View ===
-elif time_frame == "Week":
-    emp_id = st.text_input("Enter EMP ID")
-    day_df["Week"] = pd.to_numeric(day_df["Week"], errors="coerce")
-    day_df = day_df.dropna(subset=["Week"])
-    day_df["Week"] = day_df["Week"].astype(int)
-    selected_week = st.selectbox("Select Week Number", sorted(day_df["Week"].unique()))
+        total_calls = week_data["Call Count"].sum()
+        avg_aht = pd.to_timedelta(week_data["AHT"]).mean()
+        avg_hold = pd.to_timedelta(week_data["Hold"]).mean()
+        avg_wrap = pd.to_timedelta(week_data["Wrap"]).mean()
 
-    if emp_id and selected_week:
-        week_data = day_df[(day_df["EMP ID"].astype(str) == emp_id) & (day_df["Week"] == selected_week)]
-        csat_data = csat_df[(csat_df["EMP ID"].astype(str) == emp_id) & (csat_df["Week"] == selected_week)]
+        def format_timedelta(t):
+            return str(t).split(" ")[-1].split(".")[0] if pd.notnull(t) else "-"
 
-        if not week_data.empty:
-            emp_name = week_data["NAME"].iloc[0]
-            st.markdown(f"### Weekly KPI Data for **{emp_name}** | Week {selected_week}")
+        metrics_df = pd.DataFrame([
+            {"Metric": "Total Calls", "Value": total_calls},
+            {"Metric": "AHT", "Value": format_timedelta(avg_aht)},
+            {"Metric": "Hold", "Value": format_timedelta(avg_hold)},
+            {"Metric": "Wrap", "Value": format_timedelta(avg_wrap)},
+        ])
 
-            total_calls = week_data["Call Count"].sum()
-            avg_aht = pd.to_timedelta(week_data["AHT"]).mean()
-            avg_hold = pd.to_timedelta(week_data["Hold"]).mean()
-            avg_wrap = pd.to_timedelta(week_data["Wrap"]).mean()
-            avg_auto = pd.to_timedelta(week_data["Auto On"]).mean()
+        st.markdown(metrics_df.to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
 
-            def fmt(td): return str(td).split(" ")[-1].split(".")[0]
+        csat_week = csat_df[(csat_df["EMP ID"].astype(str) == emp_id) & (csat_df["Week"] == int(week_number))]
 
-            kpi_df = pd.DataFrame([
-                ("📞 Total Calls", total_calls),
-                ("⏱ AHT", fmt(avg_aht)),
-                ("🕒 Hold", fmt(avg_hold)),
-                ("🧹 Wrap", fmt(avg_wrap)),
-                ("🧠 Auto On", fmt(avg_auto)),
-            ], columns=["Metric", "Value"])
-            st.dataframe(kpi_df, use_container_width=True)
+        if not csat_week.empty:
+            csat_row = csat_week.iloc[0]
+            st.subheader("CSAT Scores")
+            csat_table = pd.DataFrame([
+                {"Type": "CSAT Resolution", "Score": csat_row["CSAT Resolution"]},
+                {"Type": "CSAT Behaviour", "Score": csat_row["CSAT Behaviour"]}
+            ])
+            st.markdown(csat_table.to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
+        else:
+            st.info("No CSAT data found for this week.")
 
-            if not csat_data.empty:
-                st.subheader("CSAT Scores")
-                csat_df_show = pd.DataFrame([
-                    ("🙋‍♂️ CSAT Resolution", csat_data["CSAT Resolution"].values[0]),
-                    ("🤝 CSAT Behaviour", csat_data["CSAT Behaviour"].values[0])
-                ], columns=["Type", "Score"])
-                st.dataframe(csat_df_show, use_container_width=True)
-            else:
-                st.info("CSAT data not found for this week.")
+# === Month Mode ===
+if time_frame == "Month" and emp_id:
+    month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ].index(m)))
 
-            quotes = [
-                "🌟 Keep up the momentum and aim higher!",
-                "💡 Greatness is built on good habits.",
-                "🔁 Stay consistent — growth follows.",
-                "🎉 You’ve got the spark — now fire up more!",
-                "🚀 Progress is progress, no matter how small."
-            ]
-            st.info(random.choice(quotes))
-        else:
-            st.warning("No data found for that EMP ID and week.")
+    emp_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == month)]
 
-# === Day View ===
-elif time_frame == "Day":
-    emp_id = st.text_input("Enter EMP ID")
-    selected_date = st.selectbox("Select Date", sorted(day_df["Date"].unique()))
+    if emp_data.empty:
+        st.warning("No data found for that EMP ID and month.")
+    else:
+        emp_name = emp_data["NAME"].values[0]
+        st.markdown(f"### KPI Data for **{emp_name}** (EMP ID: {emp_id}) | Month: **{month}**")
 
-    if emp_id and selected_date:
-        row = day_df[(day_df["EMP ID"].astype(str) == emp_id) & (day_df["Date"] == selected_date)]
-        if not row.empty:
-            row = row.iloc[0]
-            emp_name = row["NAME"]
-            st.markdown(f"### Daily KPI Data for **{emp_name}** | Date: {selected_date}")
+        st.subheader(" Performance Metrics")
+        perf_map = [
+            ("Avg hold time used", "Hold", "HH:MM:SS"),
+            ("Avg time taken to wrap the call", "Wrap", "HH:MM:SS"),
+            ("Avg duration of champ using auto on", "Auto-On", "HH:MM:SS"),
+            ("Shift adherence for the month", "Schedule Adherence", "Percentage"),
+            ("Customer feedback on resolution given", "Resolution CSAT", "Percentage"),
+            ("Customer feedback on champ behaviour", "Agent Behaviour", "Percentage"),
+            ("Avg Quality Score achieved for the month", "Quality", "Percentage"),
+            ("Process Knowledge Test", "PKT", "Percentage"),
+            ("Number of sick and unplanned leaves", "SL + UPL", "Days"),
+            ("Number of days logged in", "LOGINS", "Days"),
+        ]
 
-            def fmt(t): return str(pd.to_timedelta(t)).split(" ")[-1].split(".")[0]
+        perf_table = []
+        for desc, metric, unit in perf_map:
+            value = emp_data[metric].values[0] if metric in emp_data else "-"
+            perf_table.append({
+                "Description": desc,
+                "Metric Name": metric,
+                "Value": value,
+                "Unit": unit
+            })
 
-            metrics = [
-                ("📞 Call Count", row["Call Count"]),
-                ("⏱ AHT", fmt(row["AHT"])),
-                ("🕒 Hold", fmt(row["Hold"])),
-                ("🧹 Wrap", fmt(row["Wrap"])),
-                ("🧠 Auto On", fmt(row["Auto On"])),
-                ("🙋‍♂️ CSAT Resolution", row["CSAT Resolution"]),
-                ("🤝 CSAT Behaviour", row["CSAT Behaviour"]),
-            ]
-            st.dataframe(pd.DataFrame(metrics, columns=["Metric", "Value"]), use_container_width=True)
-        else:
-            st.info("No data found for that EMP ID and date.")
+        st.markdown(pd.DataFrame(perf_table).to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
+
+        st.subheader(" KPI Scores")
+        kpi_map = [
+            ("0%", "Hold KPI Score"),
+            ("30%", "Auto-On KPI Score"),
+            ("10%", "Schedule Adherence KPI Score"),
+            ("10%", "Resolution CSAT KPI Score"),
+            ("20%", "Agent Behaviour KPI Score"),
+            ("20%", "Quality KPI Score"),
+            ("10%", "PKT KPI Score")
+        ]
+
+        kpi_table = []
+        for weight, kpi_metric in kpi_map:
+            score = emp_data[kpi_metric].values[0] if kpi_metric in emp_data else "-"
+            kpi_table.append({
+                "Weightage": weight,
+                "KPI Metrics": kpi_metric,
+                "Score": score
+            })
+
+        st.markdown(pd.DataFrame(kpi_table).to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
+
+        st.subheader(" Grand Total")
+        current_score = emp_data['Grand Total'].values[0]
+        st.metric("Grand Total KPI", f"{current_score}")
+
+        month_order = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]
+        all_months = [m for m in month_order if m in df['Month'].unique()]
+        current_index = all_months.index(month)
+
+        if current_index > 0:
+            previous_month = all_months[current_index - 1]
+            prev_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == previous_month)]
+
+            if not prev_data.empty:
+                prev_score = prev_data["Grand Total"].values[0]
+                diff = round(current_score - prev_score, 2)
+
+                if diff > 0:
+                    st.success(f" You improved by +{diff} points since last month ({previous_month})!")
+                elif diff < 0:
+                    st.warning(f" You dropped by {abs(diff)} points since last month ({previous_month}). Let’s bounce back!")
+                else:
+                    st.info(f"No change from last month ({previous_month}). Keep the momentum going.")
+            else:
+                st.info("No data found for previous month.")
+        else:
+            st.info("First month in record — no comparison available.")
+
+        if current_score >= 4.5:
+            st.success(" Outstanding! You're setting the benchmark.")
+        elif current_score >= 4.0:
+            st.info(" Great job! Keep pushing to reach the top.")
+        elif current_score >= 3.0:
+            st.warning("You're doing good! Let’s strive for more consistency.")
+        else:
+            st.error("Don't give up — big growth starts with small steps. We're with you!")
+
+        st.subheader(" Target Committed for Next Month")
+        target_cols = [
+            "Target Committed for PKT",
+            "Target Committed for CSAT (Agent Behaviour)",
+            "Target Committed for Quality"
+        ]
+
+        emp_data.columns = emp_data.columns.str.strip()
+        if all(col in emp_data.columns for col in target_cols):
+            target_table = emp_data[target_cols].T.reset_index()
+            target_table.columns = ["Target Metric", "Target"]
+            st.markdown(target_table.to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
+        else:
+            st.info("No target data available.")
