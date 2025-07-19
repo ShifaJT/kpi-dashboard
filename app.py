@@ -1,3 +1,4 @@
+# === app.py ===
 import streamlit as st
 import pandas as pd
 import gspread
@@ -163,7 +164,7 @@ if time_frame == "Month":
             else:
                 st.info("No target data available.")
 
-# === WEEK VIEW ===
+# === Week Logic ===
 elif time_frame == "Week":
     emp_id = st.text_input("Enter EMP ID")
 
@@ -194,7 +195,7 @@ elif time_frame == "Week":
                 ("⏱ AHT", fmt(avg_aht)),
                 ("🕒 Hold", fmt(avg_hold)),
                 ("🧹 Wrap", fmt(avg_wrap)),
-                ("🔄 Auto-On", fmt(avg_auto_on)),
+                ("⚡ Auto On", fmt(avg_auto_on))
             ], columns=["Metric", "Value"])
             st.dataframe(kpi_df, use_container_width=True)
 
@@ -219,7 +220,7 @@ elif time_frame == "Week":
         else:
             st.warning("No data found for that EMP ID and week.")
 
-# === DAY VIEW ===
+# === Day Logic ===
 elif time_frame == "Day":
     emp_id = st.text_input("Enter EMP ID")
     selected_date = st.selectbox("Select Date", sorted(day_df["Date"].unique()))
@@ -231,14 +232,15 @@ elif time_frame == "Day":
             emp_name = row['NAME']
             st.markdown(f"### Daily KPI Data for **{emp_name}** | Date: {selected_date}")
 
-            def fmt(t): return str(pd.to_timedelta(t)).split(" ")[-1].split(".")[0]
+            def fmt(t):
+                return str(pd.to_timedelta(t)).split(" ")[-1].split(".")[0]
 
             metrics = [
                 ("📞 Call Count", row["Call Count"]),
                 ("⏱ AHT", fmt(row["AHT"])),
                 ("🕒 Hold", fmt(row["Hold"])),
                 ("🧹 Wrap", fmt(row["Wrap"])),
-                ("🔄 Auto-On", fmt(row["Auto On"])),
+                ("⚡ Auto On", fmt(row["Auto On"])),
                 ("🙋‍♂️ CSAT Resolution", row["CSAT Resolution"]),
                 ("🤝 CSAT Behaviour", row["CSAT Behaviour"]),
             ]
