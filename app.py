@@ -51,7 +51,7 @@ time_frame = st.selectbox("Select Timeframe", ["Day", "Week", "Month"])
 if time_frame == "Month":
     df = month_df
     emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
-    month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].index(m)))
+    month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: ["January", "February", "March", "April", "May", "June", "July"].index(m)))
 
     if emp_id and month:
         emp_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == month)]
