@@ -47,10 +47,9 @@ st.markdown("""
 # === Time Filter ===
 time_frame = st.selectbox("Select Timeframe", ["Day", "Week", "Month"])
 
-# === Month Logic ===
+# === Month View ===
 if time_frame == "Month":
     df = month_df
-    df.columns = df.columns.str.strip()
     emp_id = st.text_input("Enter EMP ID (e.g., 1070)")
     month = st.selectbox("Select Month", sorted(df['Month'].unique(), key=lambda m: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].index(m)))
 
@@ -63,7 +62,6 @@ if time_frame == "Month":
             emp_name = emp_data["NAME"].values[0]
             st.markdown(f"### KPI Data for **{emp_name}** (EMP ID: {emp_id}) | Month: **{month}**")
 
-            # === Performance Metrics ===
             st.subheader("Performance Metrics")
             perf_map = [
                 ("Avg hold time used", "Hold", "HH:MM:SS"),
@@ -82,10 +80,8 @@ if time_frame == "Month":
             for desc, metric, unit in perf_map:
                 value = emp_data[metric].values[0] if metric in emp_data else "-"
                 perf_table.append({"Description": desc, "Metric Name": metric, "Value": value, "Unit": unit})
-
             st.dataframe(pd.DataFrame(perf_table), use_container_width=True)
 
-            # === KPI Scores ===
             st.subheader("KPI Scores")
             kpi_map = [
                 ("0%", "Hold KPI Score"),
@@ -101,18 +97,14 @@ if time_frame == "Month":
             for weight, kpi_metric in kpi_map:
                 score = emp_data[kpi_metric].values[0] if kpi_metric in emp_data else "-"
                 kpi_table.append({"Weightage": weight, "KPI Metrics": kpi_metric, "Score": score})
-
             st.dataframe(pd.DataFrame(kpi_table), use_container_width=True)
 
-            # === Grand Total ===
             st.subheader("Grand Total")
             current_score = emp_data['Grand Total'].values[0]
             st.metric("Grand Total KPI", f"{current_score}")
-
             if lottie_cheer:
                 st_lottie(lottie_cheer, speed=1, height=200, key="cheer")
 
-            # === Motivational Quote based on score ===
             if current_score >= 4.5:
                 st.success("🌟 Incredible! You’re setting new standards!")
             elif current_score >= 4.0:
@@ -124,54 +116,42 @@ if time_frame == "Month":
             else:
                 st.error("🔥 Don't give up. Big wins come from small efforts.")
 
-            # === Previous Month Comparison ===
-            month_order = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+            month_order = ["January", "February", "March", "April", "May", "June", "July"]
             all_months = [m for m in month_order if m in df['Month'].unique()]
             current_index = all_months.index(month)
 
             if current_index > 0:
-                previous_month = all_months[current_index - 1]
-                prev_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == previous_month)]
-
+                prev_month = all_months[current_index - 1]
+                prev_data = df[(df["EMP ID"].astype(str) == emp_id) & (df["Month"] == prev_month)]
                 if not prev_data.empty:
                     prev_score = prev_data["Grand Total"].values[0]
                     diff = round(current_score - prev_score, 2)
-
                     if diff > 0:
-                        st.success(f" You improved by +{diff} points since last month ({previous_month})!")
+                        st.success(f"📊 You improved by +{diff} points from last month ({prev_month})!")
                     elif diff < 0:
-                        st.warning(f" You dropped by {abs(diff)} points since last month ({previous_month}). Let’s bounce back!")
+                        st.warning(f"📉 You dropped by {abs(diff)} points from last month ({prev_month}).")
                     else:
-                        st.info(f"No change from last month ({previous_month}). Keep the momentum going.")
+                        st.info(f"No change from last month ({prev_month}).")
                 else:
-                    st.info("No data found for previous month.")
+                    st.info("No data for previous month.")
             else:
-                st.info("First month in record — no comparison available.")
+                st.info("No previous month comparison available.")
 
-            # === Target Committed ===
             st.subheader("Target Committed for Next Month")
-            target_cols = [
-                "Target Committed for PKT",
-                "Target Committed for CSAT (Agent Behaviour)",
-                "Target Committed for Quality"
-            ]
-
-            emp_data.columns = emp_data.columns.str.strip()
-            if all(col in emp_data.columns for col in target_cols):
-                target_table = emp_data[target_cols].T.reset_index()
+            targets = ["Target Committed for PKT", "Target Committed for CSAT (Agent Behaviour)", "Target Committed for Quality"]
+            if all(col in emp_data.columns for col in targets):
+                target_table = emp_data[targets].T.reset_index()
                 target_table.columns = ["Target Metric", "Target"]
-                st.markdown(target_table.to_html(index=False, classes="styled-table"), unsafe_allow_html=True)
+                st.markdown(target_table.to_html(index=False), unsafe_allow_html=True)
             else:
                 st.info("No target data available.")
 
-# === Week Logic ===
+# === Week View ===
 elif time_frame == "Week":
     emp_id = st.text_input("Enter EMP ID")
-
     day_df["Week"] = pd.to_numeric(day_df["Week"], errors="coerce")
     day_df = day_df.dropna(subset=["Week"])
     day_df["Week"] = day_df["Week"].astype(int)
-
     selected_week = st.selectbox("Select Week Number", sorted(day_df["Week"].unique()))
 
     if emp_id and selected_week:
@@ -186,7 +166,7 @@ elif time_frame == "Week":
             avg_aht = pd.to_timedelta(week_data["AHT"]).mean()
             avg_hold = pd.to_timedelta(week_data["Hold"]).mean()
             avg_wrap = pd.to_timedelta(week_data["Wrap"]).mean()
-            avg_auto_on = pd.to_timedelta(week_data["Auto On"]).mean()
+            avg_auto = pd.to_timedelta(week_data["Auto On"]).mean()
 
             def fmt(td): return str(td).split(" ")[-1].split(".")[0]
 
@@ -195,7 +175,7 @@ elif time_frame == "Week":
                 ("⏱ AHT", fmt(avg_aht)),
                 ("🕒 Hold", fmt(avg_hold)),
                 ("🧹 Wrap", fmt(avg_wrap)),
-                ("⚡ Auto On", fmt(avg_auto_on))
+                ("🧠 Auto On", fmt(avg_auto)),
             ], columns=["Metric", "Value"])
             st.dataframe(kpi_df, use_container_width=True)
 
@@ -220,7 +200,7 @@ elif time_frame == "Week":
         else:
             st.warning("No data found for that EMP ID and week.")
 
-# === Day Logic ===
+# === Day View ===
 elif time_frame == "Day":
     emp_id = st.text_input("Enter EMP ID")
     selected_date = st.selectbox("Select Date", sorted(day_df["Date"].unique()))
@@ -229,22 +209,20 @@ elif time_frame == "Day":
         row = day_df[(day_df["EMP ID"].astype(str) == emp_id) & (day_df["Date"] == selected_date)]
         if not row.empty:
             row = row.iloc[0]
-            emp_name = row['NAME']
+            emp_name = row["NAME"]
             st.markdown(f"### Daily KPI Data for **{emp_name}** | Date: {selected_date}")
 
-            def fmt(t):
-                return str(pd.to_timedelta(t)).split(" ")[-1].split(".")[0]
+            def fmt(t): return str(pd.to_timedelta(t)).split(" ")[-1].split(".")[0]
 
             metrics = [
                 ("📞 Call Count", row["Call Count"]),
                 ("⏱ AHT", fmt(row["AHT"])),
                 ("🕒 Hold", fmt(row["Hold"])),
                 ("🧹 Wrap", fmt(row["Wrap"])),
-                ("⚡ Auto On", fmt(row["Auto On"])),
+                ("🧠 Auto On", fmt(row["Auto On"])),
                 ("🙋‍♂️ CSAT Resolution", row["CSAT Resolution"]),
                 ("🤝 CSAT Behaviour", row["CSAT Behaviour"]),
             ]
-            daily_df = pd.DataFrame(metrics, columns=["Metric", "Value"])
-            st.dataframe(daily_df, use_container_width=True)
+            st.dataframe(pd.DataFrame(metrics, columns=["Metric", "Value"]), use_container_width=True)
         else:
             st.info("No data found for that EMP ID and date.")
